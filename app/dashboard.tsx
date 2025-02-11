@@ -1,5 +1,5 @@
 import React from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView , TouchableOpacity } from "react-native";
 import { Text, Card, Button, Avatar, IconButton } from "react-native-paper";
 import { useRouter } from "expo-router";
 
@@ -11,17 +11,14 @@ export default function Dashboard() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
-        <Avatar.Icon
-          size={50}
-          icon="account"
-          style={styles.avatar}
-          onPress={() => router.push("../profile")}
-        />
-        <Text style={styles.username}>raipursp</Text>
+      <TouchableOpacity onPress={() => router.push("../profile")}>
+          <Avatar.Icon size={50} icon="account" style={styles.avatar} />
+        </TouchableOpacity>
+        <Text style={styles.username}>user</Text>
         <IconButton
           icon="magnify"
           size={30}
-          color="#fff"
+          iconColor="#fff"
           onPress={() => console.log("Search clicked")}
         />
       </View>
@@ -74,8 +71,7 @@ export default function Dashboard() {
       </View>
 
       <Text style={styles.footer}>
-        An initiative by Durg Range Police {"\n"} Conceptualized by Shri Ram
-        Gopal Garg, IPS
+        An initiative by IIT Ropar Students {"\n"} 
       </Text>
     </ScrollView>
   );
