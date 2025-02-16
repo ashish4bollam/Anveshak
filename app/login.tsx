@@ -1,35 +1,79 @@
-import { View, Text, TextInput, Button } from "react-native";
-import { useState } from "react";
-import { useRouter } from "expo-router";  // Correct import for router
+import React, { useState } from "react";
+import { View, Alert } from "react-native";
+import { TextInput, Button, Text } from "react-native-paper";
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+import { useRouter } from "expo-router";
+import { auth } from "./firebaseConfig";
 
 export default function LoginScreen() {
-  const [username, setUsername] = useState("");
+  const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const router = useRouter();  // Initialize the router
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (username === "admin" && password === "password") {
-      router.replace("/dashboard");  // Navigate to the dashboard
-    } else {
-      alert("Invalid Credentials");
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("Error", "Please fill in all fields.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      Alert.alert("Success", "Logged in successfully!");
+      router.replace("/dashboard");
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
+    }
+    setLoading(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      Alert.alert("Error", "Please enter your email to reset password.");
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      Alert.alert("Success", "Password reset email sent!");
+    } catch (error: any) {
+      Alert.alert("Error", error.message);
     }
   };
 
   return (
     <View style={{ flex: 1, justifyContent: "center", padding: 20 }}>
-      <Text style={{ fontSize: 24, marginBottom: 20 }}>Login</Text>
+      <Text variant="headlineMedium" style={{ marginBottom: 20 }}>
+        Login
+      </Text>
+
       <TextInput
-        placeholder="Username"
-        style={{ borderWidth: 1, marginBottom: 10, padding: 10 }}
-        onChangeText={setUsername}
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+        style={{ marginBottom: 10 }}
       />
+
       <TextInput
-        placeholder="Password"
-        secureTextEntry
-        style={{ borderWidth: 1, marginBottom: 10, padding: 10 }}
+        label="Password"
+        value={password}
         onChangeText={setPassword}
+        secureTextEntry
+        style={{ marginBottom: 10 }}
       />
-      <Button title="Login" onPress={handleLogin} />
+
+      <Button mode="contained" onPress={handleLogin} loading={loading} disabled={loading}>
+        Login
+      </Button>
+
+      <Button mode="text" onPress={handleForgotPassword} style={{ marginTop: 10 }}>
+        Forgot Password?
+      </Button>
+
+      <Text style={{ marginTop: 20, textAlign: "center" }}>Don't have an account?</Text>
+      <Button mode="text" onPress={() => router.push("/signup")}>Sign Up</Button>
     </View>
   );
 }
