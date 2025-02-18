@@ -56,7 +56,7 @@ export default function Dashboard() {
           mode="contained"
           icon="plus"
           style={styles.button}
-          onPress={() => router.push("../add-camera")}
+          onPress={() => router.push("/add-camera")}
         >
           Add Camera
         </Button>
