@@ -2,32 +2,25 @@ import React, { useState } from "react";
 import {
   View,
   Text,
-  TextInput,
-  StyleSheet,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button, Avatar, Card } from "react-native-paper";
+import { Card, Button } from "react-native-paper";
 
 export default function ProfileScreen() {
   const router = useRouter();
-
-  const [username, setUsername] = useState("John Doe");
+  const [username, setUsername] = useState("Raj Singh");
   const [phone, setPhone] = useState("9876543210");
-  const [email, setEmail] = useState("johndoe@example.com");
+  const [email, setEmail] = useState("raj1234@gmail.com");
   const [address, setAddress] = useState("123 Street Name");
-  const [city, setCity] = useState("New York");
-  const [state, setState] = useState("NY");
+  const [city, setCity] = useState("Raipur");
+  const [state, setState] = useState("Chattisgarh");
   const [postalCode, setPostalCode] = useState("10001");
   const [policeId, setPoliceId] = useState("POL123456");
   const [department, setDepartment] = useState("Traffic Control");
-
-  const saveProfile = () => {
-    alert(`Profile Saved!\nUsername: ${username}\nPhone: ${phone}`);
-    router.push("../dashboard");
-  };
 
   return (
     <KeyboardAvoidingView
@@ -35,63 +28,69 @@ export default function ProfileScreen() {
       style={{ flex: 1 }}
     >
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Profile Header */}
-        <Card style={styles.profileCard}>
-          <Avatar.Icon size={80} icon="account" style={styles.avatar} />
-          <Text style={styles.profileName}>{username}</Text>
-          <Text style={styles.profileEmail}>{email}</Text>
-        </Card>
-
-        {/* Profile Fields Card */}
+        {/* Personal Information */}
         <Card style={styles.formCard}>
+          <Text style={styles.categoryTitle}>Personal Information</Text>
           <View style={styles.formContainer}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Username</Text>
-              <TextInput style={styles.input} value={username} onChangeText={setUsername} />
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>Username:</Text>
+              <Text style={styles.value}>{username}</Text>
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Phone Number</Text>
-              <TextInput style={styles.input} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>Police ID:</Text>
+              <Text style={styles.value}>{policeId}</Text>
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email Address</Text>
-              <TextInput style={styles.input} value={email} onChangeText={setEmail} keyboardType="email-address" />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Address</Text>
-              <TextInput style={styles.input} value={address} onChangeText={setAddress} />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>City</Text>
-              <TextInput style={styles.input} value={city} onChangeText={setCity} />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>State</Text>
-              <TextInput style={styles.input} value={state} onChangeText={setState} />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Postal Code</Text>
-              <TextInput style={styles.input} value={postalCode} onChangeText={setPostalCode} keyboardType="numeric" />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Police ID</Text>
-              <TextInput style={styles.input} value={policeId} onChangeText={setPoliceId} />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Department</Text>
-              <TextInput style={styles.input} value={department} onChangeText={setDepartment} />
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>Department:</Text>
+              <Text style={styles.value}>{department}</Text>
             </View>
           </View>
         </Card>
 
+        {/* Contact Information */}
+        <Card style={styles.formCard}>
+          <Text style={styles.categoryTitle}>Contact Information</Text>
+          <View style={styles.formContainer}>
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>Phone Number:</Text>
+              <Text style={styles.value}>{phone}</Text>
+            </View>
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>Email Address:</Text>
+              <View style={styles.emailContainer}>
+                <Text style={styles.value}>{email}</Text>
+              </View>
+            </View>
+          </View>
+        </Card>
+
+        {/* Address Information */}
+        <Card style={styles.formCard}>
+          <Text style={styles.categoryTitle}>Address Information</Text>
+          <View style={styles.formContainer}>
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>Address:</Text>
+              <Text style={styles.value}>{address}</Text>
+            </View>
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>City:</Text>
+              <Text style={styles.value}>{city}</Text>
+            </View>
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>State:</Text>
+              <Text style={styles.value}>{state}</Text>
+            </View>
+            <View style={styles.inputGroupRow}>
+              <Text style={styles.label}>Postal Code:</Text>
+              <Text style={styles.value}>{postalCode}</Text>
+            </View>
+          </View>
+        </Card>
+
+        {/* Logout Button */}
+        <Button mode="contained" onPress={() => router.push("../login")} style={styles.button}>
+          Logout
+        </Button>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -105,59 +104,43 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: "center",
   },
-  profileCard: {
-    alignItems: "center",
-    padding: 20,
-    backgroundColor: "#1C1E2A",
-    borderRadius: 12,
-    width: "100%",
-    marginBottom: 20,
-  },
-  avatar: {
-    backgroundColor: "#4A90E2",
-  },
-  profileName: {
-    fontSize: 22,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginTop: 10,
-  },
-  profileEmail: {
-    fontSize: 14,
-    color: "#bbbbbb",
-  },
   formCard: {
     backgroundColor: "#1C1E2A",
     borderRadius: 12,
     width: "100%",
-    padding: 15,
+    padding: 20,
     marginBottom: 20,
   },
   formContainer: {
     width: "100%",
   },
-  inputGroup: {
+  inputGroupRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 15,
   },
+  emailContainer: {
+    marginLeft: 10,
+  },
   label: {
-    fontSize: 14,
+    fontSize: 18,
     color: "#bbbbbb",
-    marginBottom: 5,
     fontWeight: "bold",
   },
-  input: {
-    backgroundColor: "#262A34",
+  value: {
+    fontSize: 18,
     color: "#ffffff",
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#4A90E2",
-    fontSize: 16,
+  },
+  categoryTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 12,
   },
   button: {
-    marginTop: 10,
+    marginTop: 20,
     backgroundColor: "#4A90E2",
-    padding: 10,
+    padding: 12,
     width: "100%",
   },
 });
