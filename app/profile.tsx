@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,21 +6,69 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { DocumentData } from "firebase/firestore";
 import { Card, Button } from "react-native-paper";
+import { db } from "./firebaseConfig"; // Import Firestore database
+import { doc, getDoc } from "firebase/firestore";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const [username, setUsername] = useState("Raj Singh");
-  const [phone, setPhone] = useState("9876543210");
-  const [email, setEmail] = useState("raj1234@gmail.com");
-  const [address, setAddress] = useState("123 Street Name");
-  const [city, setCity] = useState("Raipur");
-  const [state, setState] = useState("Chattisgarh");
-  const [postalCode, setPostalCode] = useState("10001");
-  const [policeId, setPoliceId] = useState("POL123456");
-  const [department, setDepartment] = useState("Traffic Control");
+  const [userData, setUserData] = useState<DocumentData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const [userId, setUserId] = useState<string | null>(null);
+
+useEffect(() => {
+  const auth = getAuth();
+  const unsubscribe = onAuthStateChanged(auth, (user) => {
+    if (user) {
+      setUserId(user.uid); // Set userId dynamically
+    } else {
+      console.log("No user is logged in.");
+      setUserId(null);
+    }
+  });
+
+  return () => unsubscribe(); // Cleanup function
+}, []);
+
+useEffect(() => {
+  const fetchUserData = async () => {
+    if (!userId) return; // Ensure userId is available before fetching
+
+    try {
+      const userRef = doc(db, "users", userId);
+      const userSnap = await getDoc(userRef);
+
+      if (userSnap.exists()) {
+        console.log("User data fetched:", userSnap.data());
+        setUserData(userSnap.data());
+      } else {
+        console.log("No such user found in Firestore!");
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchUserData();
+}, [userId]); // Re-run when userId changes
+
+
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4A90E2" />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -34,15 +82,15 @@ export default function ProfileScreen() {
           <View style={styles.formContainer}>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>Username:</Text>
-              <Text style={styles.value}>{username}</Text>
+              <Text style={styles.value}>{userData?.username || "N/A"}</Text>
             </View>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>Police ID:</Text>
-              <Text style={styles.value}>{policeId}</Text>
+              <Text style={styles.value}>{userData?.policeID || "N/A"}</Text>
             </View>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>Department:</Text>
-              <Text style={styles.value}>{department}</Text>
+              <Text style={styles.value}>{userData?.department || "N/A"}</Text>
             </View>
           </View>
         </Card>
@@ -53,13 +101,11 @@ export default function ProfileScreen() {
           <View style={styles.formContainer}>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>Phone Number:</Text>
-              <Text style={styles.value}>{phone}</Text>
+              <Text style={styles.value}>{userData?.phone || "N/A"}</Text>
             </View>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>Email Address:</Text>
-              <View style={styles.emailContainer}>
-                <Text style={styles.value}>{email}</Text>
-              </View>
+              <Text style={styles.value}>{userData?.email || "N/A"}</Text>
             </View>
           </View>
         </Card>
@@ -70,19 +116,19 @@ export default function ProfileScreen() {
           <View style={styles.formContainer}>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>Address:</Text>
-              <Text style={styles.value}>{address}</Text>
+              <Text style={styles.value}>{userData?.address || "N/A"}</Text>
             </View>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>City:</Text>
-              <Text style={styles.value}>{city}</Text>
+              <Text style={styles.value}>{userData?.city || "N/A"}</Text>
             </View>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>State:</Text>
-              <Text style={styles.value}>{state}</Text>
+              <Text style={styles.value}>{userData?.state || "N/A"}</Text>
             </View>
             <View style={styles.inputGroupRow}>
               <Text style={styles.label}>Postal Code:</Text>
-              <Text style={styles.value}>{postalCode}</Text>
+              <Text style={styles.value}>{userData?.postalCode || "N/A"}</Text>
             </View>
           </View>
         </Card>
@@ -119,17 +165,17 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 15,
   },
-  emailContainer: {
-    marginLeft: 10,
-  },
   label: {
     fontSize: 18,
     color: "#bbbbbb",
     fontWeight: "bold",
+    flex: 160,
+    
   },
   value: {
     fontSize: 18,
     color: "#ffffff",
+    flex: 190,
   },
   categoryTitle: {
     fontSize: 20,
@@ -143,4 +189,11 @@ const styles = StyleSheet.create({
     padding: 12,
     width: "100%",
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#101218",
+  },
 });
+
