@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^14.0.2",
-    "@react-native-picker/picker": "^2.11.0,
+    "@react-native-picker/picker": "^2.11.0",
     "@react-native-async-storage/async-storage": "1.23.1",
     "@react-native-firebase/app": "^21.10.0",
     "@react-native-firebase/firestore": "^21.10.0",
