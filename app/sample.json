@@ -1,0 +1,86 @@
+[
+    {
+        "place_id": 226006183,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "node",
+        "osm_id": 3203442516,
+        "lat": "30.9090157",
+        "lon": "75.851601",
+        "class": "place",
+        "type": "city",
+        "place_rank": 16,
+        "importance": 0.543519636694456,
+        "addresstype": "city",
+        "name": "Ludhiana",
+        "display_name": "Ludhiana, Ludhiana (West) Tahsil, Ludhiana, Punjab, 141001, India",
+        "boundingbox": [
+            "30.7490157",
+            "31.0690157",
+            "75.6916010",
+            "76.0116010"
+        ]
+    },
+    {
+        "place_id": 227231616,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 1948490,
+        "lat": "30.789406999999997",
+        "lon": "75.82697237096326",
+        "class": "boundary",
+        "type": "administrative",
+        "place_rank": 10,
+        "importance": 0.5337120173513792,
+        "addresstype": "state_district",
+        "name": "Ludhiana",
+        "display_name": "Ludhiana, Punjab, India",
+        "boundingbox": [
+            "30.5604457",
+            "31.0182725",
+            "75.3561629",
+            "76.3233406"
+        ]
+    },
+    {
+        "place_id": 226098495,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 9897194,
+        "lat": "30.84898185",
+        "lon": "75.99925000568598",
+        "class": "boundary",
+        "type": "administrative",
+        "place_rank": 12,
+        "importance": 0.24006080186160064,
+        "addresstype": "county",
+        "name": "Ludhiana (East) Tahsil",
+        "display_name": "Ludhiana (East) Tahsil, Ludhiana, Punjab, India",
+        "boundingbox": [
+            "30.6798470",
+            "31.0182725",
+            "75.7236528",
+            "76.1525917"
+        ]
+    },
+    {
+        "place_id": 225998098,
+        "licence": "Data © OpenStreetMap contributors, ODbL 1.0. http://osm.org/copyright",
+        "osm_type": "relation",
+        "osm_id": 9897195,
+        "lat": "30.87385735",
+        "lon": "75.79462769248263",
+        "class": "boundary",
+        "type": "administrative",
+        "place_rank": 12,
+        "importance": 0.24006080186160064,
+        "addresstype": "county",
+        "name": "Ludhiana (West) Tahsil",
+        "display_name": "Ludhiana (West) Tahsil, Ludhiana, Punjab, India",
+        "boundingbox": [
+            "30.7358602",
+            "31.0130527",
+            "75.5920744",
+            "75.9577346"
+        ]
+    }
+]
