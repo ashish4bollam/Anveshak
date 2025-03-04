@@ -5,25 +5,21 @@ import {
   Alert,
   Text,
   TouchableOpacity,
-  Modal,
   StyleSheet,
   FlatList,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
-import MapView, { Region } from "react-native-maps";
+import MapView, { Circle, Region } from "react-native-maps";
 import * as Location from "expo-location";
+import Slider from "@react-native-community/slider";
+import { useRouter } from "expo-router";
 
 export default function SelectLocationScreen() {
-  interface Place {
-    place_id: number;
-    display_name: string;
-    lat: string;
-    lon: string;
-  }
-
-  const [searchResults, setSearchResults] = useState<Place[]>([]);
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [modalVisible, setModalVisible] = useState(false);
-  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [radius, setRadius] = useState(1);
   const [region, setRegion] = useState<Region>({
     latitude: 30.968,
     longitude: 76.523,
@@ -42,22 +38,25 @@ export default function SelectLocationScreen() {
       Alert.alert("Permission Denied", "Allow location access to use this feature.");
       return;
     }
-
     let userLocation = await Location.getCurrentPositionAsync({});
-    updateLocation(userLocation.coords.latitude, userLocation.coords.longitude);
+    setRegion((prev) => ({
+      ...prev,
+      latitude: userLocation.coords.latitude,
+      longitude: userLocation.coords.longitude,
+    }));
   };
 
-  // 🔍 Search for a Place
+  // 🔍 Search Location using OpenStreetMap (Nominatim)
   const searchLocation = async () => {
     if (!searchQuery.trim()) {
       Alert.alert("Input Error", "Please enter a place name.");
       return;
     }
 
-    console.log("Searching for:", searchQuery);
-
     try {
-      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}`;
+      let url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        searchQuery
+      )}`;
       let response = await fetch(url, {
         headers: {
           "User-Agent": "YourAppName/1.0 (your@email.com)",
@@ -71,7 +70,6 @@ export default function SelectLocationScreen() {
 
       if (data.length > 0) {
         setSearchResults(data);
-        setDropdownVisible(true);
       } else {
         Alert.alert("Location Not Found", "Try a different place name.");
       }
@@ -81,132 +79,152 @@ export default function SelectLocationScreen() {
     }
   };
 
-  // 📍 Update Map Location (Prevent Counter Effect)
+  // 📍 Update Map Location when a location is selected
   const updateLocation = (lat: number, lon: number) => {
-    if (lat !== region.latitude || lon !== region.longitude) {
-      console.log("Updating location to:", lat, lon);
-      setRegion((prev) => ({
-        ...prev,
-        latitude: lat,
-        longitude: lon,
-      }));
-      setDropdownVisible(false);
-    }
+    setRegion((prev) => ({
+      ...prev,
+      latitude: lat,
+      longitude: lon,
+    }));
+    setSearchResults([]); // Hide dropdown after selection
   };
 
-  // 🔄 Update Coordinates on Map Drag (Prevent Unnecessary Updates)
+  // 🔄 Update Coordinates on Map Drag
   const handleRegionChangeComplete = (newRegion: Region) => {
     if (
-      newRegion.latitude.toFixed(6) !== region.latitude.toFixed(6) ||
-      newRegion.longitude.toFixed(6) !== region.longitude.toFixed(6)
+      Math.abs(newRegion.latitude - region.latitude) > 0.0001 ||
+      Math.abs(newRegion.longitude - region.longitude) > 0.0001
     ) {
       setRegion(newRegion);
+      console.log("Location updated:", region.latitude, region.longitude);
     }
   };
 
   return (
-    <View style={styles.container}>
-      {/* 🔍 Search Input */}
-      <TextInput
-        style={styles.input}
-        placeholder="Search for a place (e.g., Ranchi, India)"
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
-      <TouchableOpacity style={styles.searchButton} onPress={searchLocation}>
-        <Text style={styles.buttonText}>Search Location</Text>
-      </TouchableOpacity>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={styles.container}>
+        {/* Search Bar */}
+        <TextInput
+          style={styles.input}
+          placeholder="Search for a place"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          onSubmitEditing={searchLocation} // Search when Enter is pressed
+        />
 
-      {/* 📍 Dropdown List */}
-      {dropdownVisible && searchResults.length > 0 && (
-        <View style={styles.dropdown}>
+        {/* Search Results */}
+        {searchResults.length > 0 && (
           <FlatList
             data={searchResults}
-            keyExtractor={(item) => item.place_id.toString()}
+            keyExtractor={(item) => item.place_id || item.display_name}
             renderItem={({ item }) => (
               <TouchableOpacity
-                style={styles.dropdownItem}
+                style={styles.resultItem}
                 onPress={() => updateLocation(parseFloat(item.lat), parseFloat(item.lon))}
               >
                 <Text>{item.display_name}</Text>
               </TouchableOpacity>
             )}
+            style={styles.resultsContainer}
           />
-        </View>
-      )}
+        )}
 
-      {/* 📌 Map */}
-      <View style={styles.mapContainer}>
-        <MapView
-          style={styles.map}
-          region={region}
-          onRegionChangeComplete={handleRegionChangeComplete}
-          zoomEnabled={true}       // ✅ Allows pinch-to-zoom
-          zoomTapEnabled={true}    // ✅ Allows double-tap zooming
-          scrollEnabled={true}     // ✅ Enables smooth map scrolling
-          pitchEnabled={true}      // ✅ Enables tilt gestures
-        />
+          {/* 🔍 Search Location Button */}
+          <TouchableOpacity style={styles.searchButton} onPress={searchLocation}>
+          <Text style={styles.buttonText}>Search Location</Text>
+        </TouchableOpacity>
 
+        {/* Map */}
+        <View style={styles.mapContainer}>
+          <MapView
+            style={styles.map}
+            region={region}
+            onRegionChangeComplete={handleRegionChangeComplete}
+          >
+            <Circle
+              center={{ latitude: region.latitude, longitude: region.longitude }}
+              radius={radius * 1000}
+              strokeWidth={2}
+              strokeColor="rgba(0, 122, 255, 0.5)"
+              fillColor="rgba(0, 122, 255, 0.2)"
+            />
+          </MapView>
 
-        {/* 📍 Fixed Marker */}
-        <View style={styles.markerFixed}>
-          <Text style={styles.markerText}>📍</Text>
-        </View>
-      </View>
-
-      {/* ✅ Confirm Button */}
-      <TouchableOpacity style={styles.confirmButton} onPress={() => setModalVisible(true)}>
-        <Text style={styles.buttonText}>Confirm Location</Text>
-      </TouchableOpacity>
-
-      {/* 📌 Location Details Modal */}
-      <Modal visible={modalVisible} animationType="slide" transparent>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selected Location</Text>
-            <Text>🌍 Latitude: {region.latitude.toFixed(6)}</Text>
-            <Text>🌍 Longitude: {region.longitude.toFixed(6)}</Text>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
-              <Text style={styles.buttonText}>Close</Text>
-            </TouchableOpacity>
+          <View style={styles.markerFixed}>
+            <Text style={styles.markerText}>📍</Text>
           </View>
         </View>
-      </Modal>
-    </View>
+
+        {/* Radius Selector */}
+        <Text>Radius: {radius} km</Text>
+        <Slider
+          style={{ width: 200, height: 40 }}
+          minimumValue={1}
+          maximumValue={10}
+          step={1}
+          value={radius}
+          onValueChange={(value) => setRadius(value)}
+        />
+
+        {/* Confirm and Navigate */}
+        <TouchableOpacity
+          style={styles.confirmButton}
+          onPress={() =>
+            router.push({
+              pathname: "/CameraListScreen", // Ensure this matches the actual filename
+              params: {
+                latitude: region.latitude.toString(),
+                longitude: region.longitude.toString(),
+                radius: radius.toString(),
+              },
+            })
+            
+          }
+        >
+          <Text style={styles.buttonText}>Confirm Location</Text>
+        </TouchableOpacity>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
-// 🌟 STYLES
 const styles = StyleSheet.create({
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  modalContent: {
-    backgroundColor: "white",
-    padding: 20,
-    borderRadius: 10,
-    width: "80%",
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontWeight: "bold",
-    fontSize: 18,
-    marginBottom: 10,
-    textAlign: "center",
-  },
   container: { flex: 1 },
-  input: { height: 40, borderColor: "#ccc", borderWidth: 1, margin: 15, paddingHorizontal: 10, borderRadius: 8 },
-  searchButton: { backgroundColor: "#007AFF", padding: 10, marginHorizontal: 15, borderRadius: 8, alignItems: "center" },
-  buttonText: { color: "white", fontSize: 16 },
-  dropdown: { backgroundColor: "white", marginHorizontal: 15, borderRadius: 8, maxHeight: 200 },
-  dropdownItem: { padding: 10, borderBottomWidth: 1, borderBottomColor: "#ccc" },
-  mapContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  input: {
+    height: 40,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    margin: 10,
+    paddingHorizontal: 10,
+    borderRadius: 5,
+  },
+  resultsContainer: {
+    backgroundColor: "#fff",
+    position: "absolute",
+    top: 50,
+    left: 10,
+    right: 10,
+    zIndex: 10,
+  },
+  resultItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ddd",
+  },
+  mapContainer: { flex: 1 },
   map: { width: "100%", height: "100%" },
-  markerFixed: { position: "absolute", top: "50%", left: "50%", transform: [{ translateX: -15 }, { translateY: -30 }] },
+  markerFixed: { position: "absolute", top: "50%", left: "50%", marginLeft: -15, marginTop: -15 },
   markerText: { fontSize: 30 },
-  confirmButton: { backgroundColor: "green", padding: 15, margin: 15, borderRadius: 8, alignItems: "center" },
-  closeButton: { backgroundColor: "red", padding: 10, marginTop: 10, borderRadius: 8, alignItems: "center" },
+  confirmButton: { backgroundColor: "#28a745", padding: 10, margin: 10, borderRadius: 5, alignItems: "center" },
+  buttonText: { color: "#fff", fontWeight: "bold" },
+  searchButton: {
+    backgroundColor: "#007bff",
+    padding: 10,
+    marginHorizontal: 10,
+    marginBottom: 10,
+    borderRadius: 5,
+    alignItems: "center",
+  },
+  
+
 });
