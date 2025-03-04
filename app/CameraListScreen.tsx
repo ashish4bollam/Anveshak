@@ -76,6 +76,13 @@ export default function CameraListScreen() {
         return R * c;
     }
 
+    // const getZoomLevel = (latitudeDelta) => {
+    //     const zoomLevel = Math.log2(360 / latitudeDelta);
+    //     console.log("Current Zoom Level:", latitudeDelta);
+    //     return zoomLevel;
+    //   };
+      
+
     return (
         <View style={styles.container}>
             <Text style={styles.title}>Cameras in Selected Region</Text>
@@ -84,9 +91,11 @@ export default function CameraListScreen() {
                 initialRegion={{
                     latitude: Number(latitude),
                     longitude: Number(longitude),
-                    latitudeDelta: 0.05,
-                    longitudeDelta: 0.05,
-                }}
+                    latitudeDelta: 0.03,
+                    longitudeDelta: 0.03,
+                }
+            }
+            //onRegionChangeComplete={(region) => getZoomLevel(region.latitudeDelta)}
             >
                 {/* Circle to indicate selected radius */}
                 <Circle
