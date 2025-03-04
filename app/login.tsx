@@ -12,7 +12,6 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if(!email && !password) router.replace("/dashboard");
     if (!email || !password) {
       Alert.alert("Error", "Please fill in all fields.");
       return;

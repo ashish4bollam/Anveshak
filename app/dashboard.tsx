@@ -1,20 +1,49 @@
-import React from "react";
-import { View, StyleSheet, ScrollView , TouchableOpacity } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import { Text, Card, Button, Avatar, IconButton } from "react-native-paper";
 import { useRouter } from "expo-router";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "./firebaseConfig"; 
 
 export default function Dashboard() {
   const router = useRouter();
-  const totalCameras = 21159;
-  const activeCameras = 21159;
+  const [activeDevices, setActiveDevices] = useState(0);
+  const [inactiveDevices, setInactiveDevices] = useState(0);
+
+  // Fetch data from Firestore when component mounts
+  useEffect(() => {
+    const fetchDeviceData = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, "cctv_cameras"));
+        let activeCount = 0;
+        let inactiveCount = 0;
+
+        snapshot.forEach((doc) => {
+          const device = doc.data();
+          if (device.workingCondition === "Working") {
+            activeCount++;
+          } else if (device.workingCondition === "Not Working") {
+            inactiveCount++;
+          }
+        });
+
+        setActiveDevices(activeCount);
+        setInactiveDevices(inactiveCount);
+      } catch (error) {
+        console.error("Error fetching devices: ", error);
+      }
+    };
+
+    fetchDeviceData();
+  }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.header}>
-      <TouchableOpacity onPress={() => router.push("../profile")}>
+        <TouchableOpacity onPress={() => router.push("../profile")}>
           <Avatar.Icon size={50} icon="account" style={styles.avatar} />
         </TouchableOpacity>
-        <Text style={styles.username}>user</Text>
+        <Text style={styles.username}>profile</Text>
         <IconButton
           icon="magnify"
           size={30}
@@ -34,7 +63,7 @@ export default function Dashboard() {
           )}
         />
         <Card.Content>
-          <Text style={styles.cardValue}>{totalCameras}</Text>
+          <Text style={styles.cardValue}>{activeDevices + inactiveDevices}</Text>
         </Card.Content>
       </Card>
 
@@ -47,7 +76,20 @@ export default function Dashboard() {
           )}
         />
         <Card.Content>
-          <Text style={styles.cardValue}>{activeCameras}</Text>
+          <Text style={styles.cardValue}>{activeDevices}</Text>
+        </Card.Content>
+      </Card>
+
+      <Card style={styles.card}>
+        <Card.Title
+          title="Inactive Devices"
+          titleStyle={styles.cardTitle}
+          left={(props) => (
+            <Avatar.Icon {...props} icon="cancel" style={styles.cardIcon} />
+          )}
+        />
+        <Card.Content>
+          <Text style={styles.cardValue}>{inactiveDevices}</Text>
         </Card.Content>
       </Card>
 
@@ -71,7 +113,7 @@ export default function Dashboard() {
       </View>
 
       <Text style={styles.footer}>
-        An initiative by IIT Ropar Students {"\n"} 
+        An initiative by IIT Ropar Students {"\n"}
       </Text>
     </ScrollView>
   );
@@ -80,7 +122,7 @@ export default function Dashboard() {
 const styles = StyleSheet.create({
   container: {
     padding: 20,
-    backgroundColor: "#101218", // Dark background to match the image
+    backgroundColor: "#101218",
     flexGrow: 1,
   },
   header: {
@@ -90,7 +132,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   avatar: {
-    backgroundColor: "#3A3F51", // Matching icon background color
+    backgroundColor: "#3A3F51",
   },
   username: {
     fontSize: 24,
@@ -120,7 +162,7 @@ const styles = StyleSheet.create({
   cardValue: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#00E676", // Green color for values
+    color: "#00E676",
     marginTop: 5,
   },
   buttonContainer: {
