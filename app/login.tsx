@@ -4,7 +4,6 @@ import { TextInput, Button, Text, Card } from "react-native-paper";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
 import { useRouter } from "expo-router";
 import { auth } from "./firebaseConfig";
-
 export default function LoginScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");

@@ -1,132 +1,577 @@
-import React, { useState } from "react";
-import { 
-  View, Text, TextInput, StyleSheet, TouchableOpacity, Alert, ActivityIndicator 
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  ScrollView,
+  StyleSheet,
+  Alert,
+  TouchableOpacity,
 } from "react-native";
-import { Button, Avatar } from "react-native-paper";
+import { TextInput, Button, Text, Card, Divider } from "react-native-paper";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
-import { collection, addDoc } from "firebase/firestore";
+import { collection, addDoc, getDocs } from "firebase/firestore";
 import { db } from "./firebaseConfig";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
+import * as DocumentPicker from "expo-document-picker";
+import * as XLSX from "xlsx";
+import Papa from "papaparse";
+import * as FileSystem from "expo-file-system";
+import DateTimePicker from '@react-native-community/datetimepicker'; 
+
+interface FormData {
+  ownerName: string;
+  phoneNumber: string;
+  deviceName: string;
+  deviceType: string;
+  latitude: string;
+  longitude: string;
+  address: string;
+  city: string;
+  organization: string;
+  workingCondition: string; // "Working" or "Not Working"
+  username?: string;
+  policeId?: string;
+  dateChecked?: string; // Add this line
+}
+
+// Validation function: returns first encountered error report.
+const validateExcelData = (data: any[]): { valid: boolean; report: string[] } => {
+  const requiredColumns = [
+    "ownerName",
+    "phoneNumber",
+    "deviceName",
+    "deviceType",
+    "latitude",
+    "longitude",
+    "address",
+    "city",
+    "organization",
+    "workingCondition",
+    "policeId",
+    "username", // Add this line
+    "dateChecked", // Add this line
+  ];
+  let errors: string[] = [];
+
+  for (let index = 0; index < data.length; index++) {
+    const row = data[index];
+
+    // Check for missing required columns
+    for (let col of requiredColumns) {
+      if (!row[col] || row[col].toString().trim() === "") {
+        errors.push(`Row ${index + 1} is missing value for "${col}".`);
+        console.log(`Row ${index + 1} is missing value for "${col}".`);
+      }
+    }
+
+    // Validate phone number format (if present)
+    if (row["phoneNumber"] && !/^\d{10}$/.test(row["phoneNumber"].toString().trim())) {
+      errors.push(`Row ${index + 1} has an invalid phone number: "${row["phoneNumber"]}".`);
+      console.log(`Row ${index + 1} has an invalid phone number: "${row["phoneNumber"]}".`);
+    }
+
+    // Validate date format (if present)
+    if (row["dateChecked"] && !/^\d{4}-\d{2}-\d{2}$/.test(row["dateChecked"].toString().trim())) {
+      errors.push(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
+      console.log(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
+    }
+  }
+
+  return { valid: errors.length === 0, report: errors };
+};
 
 export default function AddCamera() {
   const router = useRouter();
+  const [formData, setFormData] = useState<FormData>({
+    ownerName: "",
+    phoneNumber: "",
+    deviceName: "",
+    deviceType: "",
+    latitude: "",
+    longitude: "",
+    address: "",
+    city: "",
+    organization: "",
+    workingCondition: "",
+    dateChecked: "", // Add this line
+  });
+  const [loading, setLoading] = useState<boolean>(false);
+  const [userData, setUserData] = useState<{ username: string; policeId: string } | null>(null);
+  const [date, setDate] = useState(new Date()); // Add this line
+  const [showDatePicker, setShowDatePicker] = useState(false); // Add this line
 
-  const [ownerName, setOwnerName] = useState("");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [deviceName, setDeviceName] = useState("");
-  const [deviceType, setDeviceType] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
-  const [address, setAddress] = useState("");
-  const [city, setCity] = useState("");
-  const [organization, setOrganization] = useState("");
-  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const authInstance = getAuth();
+    onAuthStateChanged(authInstance, async (user) => {
+      if (user) {
+        const userRef = collection(db, "users");
+        const userSnapshot = await getDocs(userRef);
+        const userInfo = userSnapshot.docs.find((doc) => doc.id === user.uid)?.data();
+        if (userInfo) {
+          setUserData({ username: userInfo.username, policeId: userInfo.policeId });
+        }
+      }
+    });
+  }, []);
 
-  // 📍 Get Current Location
+  const handleInputChange = (field: keyof FormData, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const onDateChange = (event: any, selectedDate?: Date) => {
+    const currentDate = selectedDate || date;
+    setShowDatePicker(false);
+    setDate(currentDate);
+    handleInputChange("dateChecked", currentDate.toISOString().split('T')[0]); // Format as YYYY-MM-DD
+  };
+
   const getLocation = async () => {
     setLoading(true);
+    console.log("hello")
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      alert("Permission to access location was denied");
+      Alert.alert("Permission Denied", "Permission to access location was denied");
       setLoading(false);
       return;
     }
-
     let location = await Location.getCurrentPositionAsync({});
-    setLatitude(location.coords.latitude.toString());
-    setLongitude(location.coords.longitude.toString());
-
+    handleInputChange("latitude", location.coords.latitude.toString());
+    handleInputChange("longitude", location.coords.longitude.toString());
     let geocode = await Location.reverseGeocodeAsync(location.coords);
     if (geocode.length > 0) {
-      setAddress(`${geocode[0].name}, ${geocode[0].city}`);
+      const addr = [geocode[0].name, geocode[0].city, geocode[0].region]
+        .filter(Boolean)
+        .join(", ");
+      handleInputChange("address", addr);
     }
-
     setLoading(false);
   };
 
-  // ✅ Validate Form
-  const validateForm = () => {
-    if (!city || !organization || !ownerName || !phoneNumber || !deviceName || !deviceType || !latitude || !longitude) {
-      Alert.alert("Missing Fields", "Please fill in all fields before submitting.");
+  const validateForm = (): boolean => {
+    const { city, organization, ownerName, phoneNumber, deviceName, deviceType, latitude, longitude, address, workingCondition, dateChecked } = formData;
+    if (!city || !organization || !ownerName || !phoneNumber || !deviceName || !deviceType || !latitude || !longitude || !address || !workingCondition || !dateChecked) {
+      Alert.alert("Missing Fields", "Please fill in all mandatory fields.");
       return false;
     }
     if (!/^\d{10}$/.test(phoneNumber)) {
       Alert.alert("Invalid Phone Number", "Phone number must be exactly 10 digits.");
       return false;
     }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateChecked)) {
+      Alert.alert("Invalid Date", "Date must be in the format YYYY-MM-DD.");
+      return false;
+    }
     return true;
   };
 
-  // 🚀 Submit Data to Firestore
   const handleSubmit = async () => {
     if (!validateForm()) return;
-
     setLoading(true);
-
     try {
-      await addDoc(collection(db, "cctv_cameras"), {
-        city,
-        organization,
-        ownerName,
-        phoneNumber,
-        deviceName,
-        deviceType,
-        latitude,
-        longitude,
-        address,
-      });
-
+      const finalData = {
+        ...formData,
+        username: userData?.username,
+        policeId: userData?.policeId,
+      };
+      console.log(finalData);
+      await addDoc(collection(db, "cctv_cameras"), finalData);
       Alert.alert("Success", "Camera details submitted successfully!");
       router.push("/dashboard");
     } catch (error) {
       Alert.alert("Error", "Failed to submit data.");
       console.error("Firestore Error:", error);
     }
-
     setLoading(false);
   };
 
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Add CCTV Camera</Text>
+  const handleFileUpload = async () => {
+    try {
+      const res: any = await DocumentPicker.getDocumentAsync({
+        type: "*/*",
+        copyToCacheDirectory: true,
+      });
+      console.log("Document Picker Result:", res);
 
-      <TextInput style={styles.input} placeholder="City" placeholderTextColor="#aaa" value={city} onChangeText={setCity} />
-      <TextInput style={styles.input} placeholder="Organization" placeholderTextColor="#aaa" value={organization} onChangeText={setOrganization} />
-      <TextInput style={styles.input} placeholder="CCTV Owner Name" placeholderTextColor="#aaa" value={ownerName} onChangeText={setOwnerName} />
-      <TextInput style={styles.input} placeholder="CCTV Owner Phone Number" placeholderTextColor="#aaa" value={phoneNumber} onChangeText={setPhoneNumber} keyboardType="phone-pad" />
+      if (res.canceled) {
+        console.log("User cancelled the picker");
+        return;
+      }
 
-      <TextInput style={styles.input} placeholder="CCTV Device Name" placeholderTextColor="#aaa" value={deviceName} onChangeText={setDeviceName} />
-      <TextInput style={styles.input} placeholder="CCTV Device Type" placeholderTextColor="#aaa" value={deviceType} onChangeText={setDeviceType} />
+      if (!res.assets || res.assets.length === 0) {
+        Alert.alert("Error", "No file was selected.");
+        return;
+      }
+      const asset = res.assets[0];
+      const fileUri: string | undefined = asset.uri;
+      const fileName: string | undefined = asset.name;
 
-      {/* 📍 GPS Coordinates */}
-      <View style={styles.coordinatesContainer}>
-        <TextInput style={styles.inputSmall} placeholder="Latitude" placeholderTextColor="#aaa" value={latitude} editable={false} />
-        <TextInput style={styles.inputSmall} placeholder="Longitude" placeholderTextColor="#aaa" value={longitude} editable={false} />
-        <TouchableOpacity onPress={getLocation} style={styles.gpsButton}>
-          <Avatar.Icon size={40} icon="crosshairs-gps" style={styles.icon} />
+      if (!fileUri) {
+        Alert.alert("Error", "File URI is undefined.");
+        return;
+      }
+      if (!fileName) {
+        Alert.alert("Error", "File name is undefined.");
+        return;
+      }
+
+      const fileExtension = fileName.split(".").pop()?.toLowerCase();
+      if (!fileExtension) {
+        Alert.alert("Error", "Could not determine file extension.");
+        return;
+      }
+
+      let parsedData: any[] = [];
+
+      if (fileExtension === "csv") {
+        const response = await fetch(fileUri);
+        const fileText = await response.text();
+        parsedData = Papa.parse(fileText, { header: true }).data;
+      } else if (fileExtension === "xls" || fileExtension === "xlsx") {
+        const response = await fetch(fileUri);
+        const arrayBuffer = await response.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+      } else {
+        Alert.alert("Error", "Unsupported file type. Please upload a CSV or Excel file.");
+        return;
+      }
+
+      if (!parsedData || parsedData.length === 0) {
+        Alert.alert("Error", "No valid data found in the file.");
+        return;
+      }
+
+      const { valid, report } = validateExcelData(parsedData);
+
+      if (!valid) {
+        router.push({
+          pathname: "/ValidationReportScreen",
+          params: { report: JSON.stringify(report) }, // Encode as JSON,
+        } as any);
+        return;
+      }
+
+      setLoading(true);
+      console.log("Parsed Data:", parsedData);
+
+      // Upload each record after trimming and defaulting values.
+      for (const record of parsedData) {
+        if (record && typeof record === "object" && !Array.isArray(record)) {
+          console.log("Parsed record keys:", Object.keys(record));
+          console.log("Record policeId before trimming:", record.policeId);
+          const finalData: FormData = {
+            ownerName: (record.ownerName || "").trim(),
+            phoneNumber: (record.phoneNumber || "").trim(),
+            deviceName: (record.deviceName || "").trim(),
+            deviceType: (record.deviceType || "").trim(),
+            latitude: (record.latitude || "").trim(),
+            longitude: (record.longitude || "").trim(),
+            address: (record.address || "").trim(),
+            city: (record.city || "").trim(),
+            organization: (record.organization || "").trim(),
+            workingCondition: (record.workingCondition || "").trim(),
+            username: (record?.username || "").trim(),
+            policeId: (record.policeId || userData?.policeId || "UNKNOWN_ID").trim(),
+            dateChecked: (record.dateChecked || new Date().toISOString().split('T')[0]).trim(), // Add this line
+          };
+
+          console.log("Final data being uploaded:", finalData);
+          await addDoc(collection(db, "cctv_cameras"), finalData);
+        }
+      }
+
+      Alert.alert("Success", "File uploaded and data populated successfully!");
+      router.push("/dashboard");
+    } catch (err) {
+      console.error("File Upload Error:", err);
+      Alert.alert("Error", "Failed to upload file.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Download template file as CSV and save to local storage.
+  const handleDownloadTemplate = async () => {
+    const csvTemplate = `ownerName,phoneNumber,deviceName,deviceType,latitude,longitude,address,city,organization,workingCondition,policeId,dateChecked
+John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnagar,IIT Ropar,Working,PR12345,2023-10-01
+`;
+    const fileUri = FileSystem.documentDirectory + "template.csv";
+    try {
+      await FileSystem.writeAsStringAsync(fileUri, csvTemplate, { encoding: FileSystem.EncodingType.UTF8 });
+      Alert.alert("Template Downloaded", `Template saved as CSV in local storage:\n${fileUri}`);
+    } catch (error) {
+      console.error("Error downloading template:", error);
+      Alert.alert("Error", "Failed to download template.");
+    }
+  };
+
+  const renderWorkingConditionSelector = () => {
+    return (
+      <View style={styles.conditionContainer}>
+        <TouchableOpacity
+          style={[
+            styles.conditionButton,
+            formData.workingCondition === "Working" && styles.conditionButtonSelected,
+          ]}
+          onPress={() => handleInputChange("workingCondition", "Working")}
+        >
+          <Text
+            style={[
+              styles.conditionText,
+              formData.workingCondition === "Working" && styles.conditionButtonSelected,
+            ]}
+          >
+            Working
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.conditionButton,
+            formData.workingCondition === "Not Working" && styles.conditionButtonSelected,
+          ]}
+          onPress={() => handleInputChange("workingCondition", "Not Working")}
+        >
+          <Text
+            style={[
+              styles.conditionText,
+              formData.workingCondition === "Not Working" && styles.conditionButtonSelected,
+            ]}
+          >
+            Not Working
+          </Text>
         </TouchableOpacity>
       </View>
+    );
+  };
 
-      <TextInput style={styles.input} placeholder="Current Location" placeholderTextColor="#aaa" value={address} editable={false} />
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Add CCTV Camera</Text>
 
-      {loading && <ActivityIndicator size="large" color="#4A90E2" />}
+      <View style={styles.formGroup}>
+        <TextInput
+          label="City"
+          mode="outlined"
+          value={formData.city}
+          onChangeText={(val) => handleInputChange("city", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Organization"
+          mode="outlined"
+          value={formData.organization}
+          onChangeText={(val) => handleInputChange("organization", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Owner Name"
+          mode="outlined"
+          value={formData.ownerName}
+          onChangeText={(val) => handleInputChange("ownerName", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Phone Number"
+          mode="outlined"
+          value={formData.phoneNumber}
+          onChangeText={(val) => handleInputChange("phoneNumber", val)}
+          keyboardType="phone-pad"
+          style={styles.input}
+        />
+        <TextInput
+          label="Device Name"
+          mode="outlined"
+          value={formData.deviceName}
+          onChangeText={(val) => handleInputChange("deviceName", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Device Type"
+          mode="outlined"
+          value={formData.deviceType}
+          onChangeText={(val) => handleInputChange("deviceType", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Address"
+          mode="outlined"
+          value={formData.address}
+          onChangeText={(val) => handleInputChange("address", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Latitude"
+          mode="outlined"
+          value={formData.latitude}
+          onChangeText={(val) => handleInputChange("latitude", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Longitude"
+          mode="outlined"
+          value={formData.longitude}
+          onChangeText={(val) => handleInputChange("longitude", val)}
+          style={styles.input}
+        />
+        <View style={styles.input}>
+          <Button onPress={() => setShowDatePicker(true)} mode="outlined">
+            Select Date Checked
+          </Button>
+          {showDatePicker && (
+            <DateTimePicker
+              value={date}
+              mode="date"
+              display="default"
+              onChange={onDateChange}
+            />
+          )}
+          <TextInput
+            label="Date Checked"
+            mode="outlined"
+            value={formData.dateChecked}
+            editable={false}
+            style={styles.input}
+          />
+        </View>
+        {renderWorkingConditionSelector()}
+      </View>
 
-      <Button mode="contained" style={styles.submitButton} onPress={handleSubmit}>
-        Submit
-      </Button>
-    </View>
+      <View style={styles.buttonContainer}>
+        <Button
+          mode="contained"
+          onPress={getLocation}
+          style={[styles.button, styles.buttonPrimary]}
+          labelStyle={styles.buttonLabel}
+        >
+          Get Location
+        </Button>
+
+        <Button
+          mode="contained"
+          onPress={handleSubmit}
+          style={[styles.button, styles.buttonSuccess]}
+          labelStyle={styles.buttonLabel}
+        >
+          Submit
+        </Button>
+
+        <Button
+          mode="contained"
+          onPress={handleFileUpload}
+          style={[styles.button, styles.buttonDanger]}
+          labelStyle={styles.buttonLabel}
+        >
+          Upload
+        </Button>
+
+        <Button
+          mode="contained"
+          onPress={handleDownloadTemplate}
+          style={[styles.button, styles.buttonTemplate]}
+          labelStyle={styles.buttonLabel}
+        >
+          Download Template
+        </Button>
+      </View>
+    </ScrollView>
   );
 }
 
-// 🌟 Styles
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: "#f8f9fa" },
-  title: { fontSize: 24, fontWeight: "bold", color: "#333", marginBottom: 20, textAlign: "center" },
-  input: { height: 50, backgroundColor: "#fff", color: "#000", borderRadius: 8, paddingHorizontal: 10, fontSize: 16, marginBottom: 12, borderColor: "#ddd", borderWidth: 1 },
-  coordinatesContainer: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  inputSmall: { flex: 1, height: 50, backgroundColor: "#fff", color: "#000", borderRadius: 8, paddingHorizontal: 10, fontSize: 16, marginRight: 10, borderColor: "#ddd", borderWidth: 1 },
-  gpsButton: { padding: 5 },
-  submitButton: { backgroundColor: "#007bff", marginTop: 10, paddingVertical: 8 },
-  icon: { backgroundColor: "#e9ecef" },
+  container: {
+    flexGrow: 1,
+    padding: 24,
+    backgroundColor: "#F7F9FC",
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "800",
+    marginBottom: 28,
+    textAlign: "center",
+    color: "#1A365D",
+    letterSpacing: 0.5,
+  },
+  formGroup: {
+    marginBottom: 24,
+    backgroundColor: "#FFFFFF",
+    padding: 24,
+    borderRadius: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  input: {
+    marginBottom: 16,
+    backgroundColor: "#FAFBFF",
+  },
+  conditionContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  conditionButton: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    borderRadius: 10,
+    paddingVertical: 14,
+    marginHorizontal: 6,
+    backgroundColor: "#FAFBFF",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  conditionButtonSelected: {
+    backgroundColor: "#0EA5E9",
+    borderColor: "#0284C7",
+    color: "#FFFFFF",
+  },
+  conditionText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#475569",
+  },
+  buttonContainer: {
+    flexDirection: "column",
+    alignItems: "center",
+    marginTop: 24,
+  },
+  button: {
+    width: "85%",
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  buttonPrimary: {
+    backgroundColor: "#3B82F6", // Blue
+  },
+  buttonSuccess: {
+    backgroundColor: "#10B981", // Green
+  },
+  buttonDanger: {
+    backgroundColor: "#F43F5E", // Red
+  },
+  buttonTemplate: {
+    backgroundColor: "#8B5CF6", // Purple
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+  },
 });
-
