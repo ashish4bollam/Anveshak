@@ -5,18 +5,20 @@ import {
   StyleSheet,
   Alert,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
-import { TextInput, Button, Text, Card, Divider } from "react-native-paper";
+import { TextInput, Button, Text } from "react-native-paper";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
-import { collection, addDoc, getDocs } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
 import * as DocumentPicker from "expo-document-picker";
 import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import * as FileSystem from "expo-file-system";
-import DateTimePicker from '@react-native-community/datetimepicker'; 
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { Picker } from "@react-native-picker/picker";
 
 interface FormData {
   ownerName: string;
@@ -31,11 +33,11 @@ interface FormData {
   workingCondition: string; // "Working" or "Not Working"
   username?: string;
   policeId?: string;
-  dateChecked?: string; // Add this line
+  dateChecked?: string;
 }
 
 // Validation function: returns first encountered error report.
-const validateExcelData = (data: any[]): { valid: boolean; report: string[] } => {
+const validateExcelData = async (data: any[], userData: { username: string; policeId: string } | null): Promise<{ valid: boolean; report: string[] }> => {
   const requiredColumns = [
     "ownerName",
     "phoneNumber",
@@ -48,8 +50,8 @@ const validateExcelData = (data: any[]): { valid: boolean; report: string[] } =>
     "organization",
     "workingCondition",
     "policeId",
-    "username", // Add this line
-    "dateChecked", // Add this line
+    "username",
+    "dateChecked",
   ];
   let errors: string[] = [];
 
@@ -75,6 +77,21 @@ const validateExcelData = (data: any[]): { valid: boolean; report: string[] } =>
       errors.push(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
       console.log(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
     }
+
+    // Check for duplicates
+    const camerasRef = collection(db, "cctv_cameras");
+    const q = query(
+      camerasRef,
+      where("deviceName", "==", row.deviceName),
+      where("latitude", "==", row.latitude),
+      where("longitude", "==", row.longitude)
+    );
+
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      errors.push(`Row ${index + 1} is a duplicate entry: Device "${row.deviceName}" at (${row.latitude}, ${row.longitude}) already exists.`);
+      console.log(`Row ${index + 1} is a duplicate entry: Device "${row.deviceName}" at (${row.latitude}, ${row.longitude}) already exists.`);
+    }
   }
 
   return { valid: errors.length === 0, report: errors };
@@ -93,12 +110,13 @@ export default function AddCamera() {
     city: "",
     organization: "",
     workingCondition: "",
-    dateChecked: "", // Add this line
+    dateChecked: "",
   });
   const [loading, setLoading] = useState<boolean>(false);
   const [userData, setUserData] = useState<{ username: string; policeId: string } | null>(null);
-  const [date, setDate] = useState(new Date()); // Add this line
-  const [showDatePicker, setShowDatePicker] = useState(false); // Add this line
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showCustomDeviceTypeInput, setShowCustomDeviceTypeInput] = useState(false);
 
   useEffect(() => {
     const authInstance = getAuth();
@@ -122,12 +140,11 @@ export default function AddCamera() {
     const currentDate = selectedDate || date;
     setShowDatePicker(false);
     setDate(currentDate);
-    handleInputChange("dateChecked", currentDate.toISOString().split('T')[0]); // Format as YYYY-MM-DD
+    handleInputChange("dateChecked", currentDate.toISOString().split("T")[0]); // Format as YYYY-MM-DD
   };
 
   const getLocation = async () => {
     setLoading(true);
-    console.log("hello")
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
       Alert.alert("Permission Denied", "Permission to access location was denied");
@@ -167,21 +184,65 @@ export default function AddCamera() {
   const handleSubmit = async () => {
     if (!validateForm()) return;
     setLoading(true);
+
     try {
-      const finalData = {
-        ...formData,
-        username: userData?.username,
-        policeId: userData?.policeId,
-      };
-      console.log(finalData);
-      await addDoc(collection(db, "cctv_cameras"), finalData);
-      Alert.alert("Success", "Camera details submitted successfully!");
-      router.push("/dashboard");
+      // Check for duplicates
+      const camerasRef = collection(db, "cctv_cameras");
+      const q = query(
+        camerasRef,
+        where("deviceName", "==", formData.deviceName),
+        where("latitude", "==", formData.latitude),
+        where("longitude", "==", formData.longitude)
+      );
+
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        // Duplicate found
+        Alert.alert(
+          "Duplicate Entry",
+          "A camera with the same details already exists. Do you want to proceed?",
+          [
+            {
+              text: "Cancel",
+              onPress: () => {
+                setLoading(false);
+                return;
+              },
+              style: "cancel",
+            },
+            {
+              text: "Proceed",
+              onPress: async () => {
+                const finalData = {
+                  ...formData,
+                  username: userData?.username,
+                  policeId: userData?.policeId,
+                };
+                await addDoc(camerasRef, finalData);
+                Alert.alert("Success", "Camera details submitted successfully!");
+                router.push("/dashboard");
+              },
+            },
+          ]
+        );
+      } else {
+        // No duplicate found, proceed with submission
+        const finalData = {
+          ...formData,
+          username: userData?.username,
+          policeId: userData?.policeId,
+        };
+        await addDoc(camerasRef, finalData);
+        Alert.alert("Success", "Camera details submitted successfully!");
+        router.push("/dashboard");
+      }
     } catch (error) {
       Alert.alert("Error", "Failed to submit data.");
       console.error("Firestore Error:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleFileUpload = async () => {
@@ -243,7 +304,8 @@ export default function AddCamera() {
         return;
       }
 
-      const { valid, report } = validateExcelData(parsedData);
+      // Validate data and check for duplicates
+      const { valid, report } = await validateExcelData(parsedData, userData);
 
       if (!valid) {
         router.push({
@@ -274,7 +336,7 @@ export default function AddCamera() {
             workingCondition: (record.workingCondition || "").trim(),
             username: (record?.username || "").trim(),
             policeId: (record.policeId || userData?.policeId || "UNKNOWN_ID").trim(),
-            dateChecked: (record.dateChecked || new Date().toISOString().split('T')[0]).trim(), // Add this line
+            dateChecked: (record.dateChecked || new Date().toISOString().split("T")[0]).trim(),
           };
 
           console.log("Final data being uploaded:", finalData);
@@ -387,13 +449,30 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
           onChangeText={(val) => handleInputChange("deviceName", val)}
           style={styles.input}
         />
-        <TextInput
-          label="Device Type"
-          mode="outlined"
-          value={formData.deviceType}
-          onChangeText={(val) => handleInputChange("deviceType", val)}
-          style={styles.input}
-        />
+        <View style={styles.input}>
+          <Picker
+            selectedValue={formData.deviceType}
+            onValueChange={(itemValue) => {
+              handleInputChange("deviceType", itemValue);
+              setShowCustomDeviceTypeInput(itemValue === "oth"); // Show custom input if "Other" is selected
+            }}
+          >
+            <Picker.Item label="Dome Camera" value="dome" />
+            <Picker.Item label="Bullet Camera" value="bullet" />
+            <Picker.Item label="C-Mount Camera" value="cmount" />
+            <Picker.Item label="PTZ Camera" value="ptz" />
+            <Picker.Item label="Other" value="oth" />
+          </Picker>
+        </View>
+        {showCustomDeviceTypeInput && (
+          <TextInput
+            label="Custom Device Type"
+            mode="outlined"
+            value={formData.deviceType}
+            onChangeText={(val) => handleInputChange("deviceType", val)}
+            style={styles.input}
+          />
+        )}
         <TextInput
           label="Address"
           mode="outlined"

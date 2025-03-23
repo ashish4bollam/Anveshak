@@ -102,6 +102,11 @@ export default function Dashboard() {
         >
           Add Camera
         </Button>
+
+        <Button mode="contained" onPress={() => router.push("/my-cameras")} style={styles.button}>
+          View My Cameras
+        </Button>
+          
         <Button
           mode="contained"
           icon="map-marker-radius"
