@@ -1,5 +1,16 @@
-import { Stack } from "expo-router";
+import React from 'react';
 
-export default function Layout() {
-  return <Stack />;
+import { Stack } from 'expo-router';
+
+export default function RootLayout() {
+  return (
+
+      <Stack
+        screenOptions={{
+          headerShown: false, // Hide header for all screens
+          contentStyle: { backgroundColor: '#101218' } // Optional: consistent background
+        }}
+      />
+  
+  );
 }

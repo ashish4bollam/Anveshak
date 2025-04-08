@@ -22,6 +22,7 @@ export default function SignupScreen() {
   const [postalCode, setPostalCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [allowedEmails, setAllowedEmails] = useState(new Set());
+  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
 
   useEffect(() => {
     const fetchAllowedEmails = async () => {
@@ -100,7 +101,20 @@ export default function SignupScreen() {
 
         <TextInput label="Phone Number *" value={phone} onChangeText={setPhone} keyboardType="phone-pad" style={{ marginBottom: 10 }} />
         <TextInput label="Email *" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" style={{ marginBottom: 10 }} />
-        <TextInput label="Password *" value={password} onChangeText={setPassword} secureTextEntry style={{ marginBottom: 20 }} />
+        <TextInput 
+          label="Password *" 
+          value={password} 
+          onChangeText={setPassword} 
+          secureTextEntry={!showPassword} // Toggle based on showPassword state
+          style={{ marginBottom: 20 }}
+          right={
+            <TextInput.Icon 
+              icon={showPassword ? "eye-off" : "eye"} 
+              onPress={() => setShowPassword(!showPassword)} 
+              forceTextInputFocus={false} // Prevents keyboard from closing when pressing the icon
+            />
+          }
+        />
         <Divider style={{ marginVertical: 10 }} />
 
         <TextInput label="Address" value={address} onChangeText={setAddress} style={{ marginBottom: 10 }} />

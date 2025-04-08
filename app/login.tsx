@@ -14,6 +14,7 @@ export default function LoginScreen() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
 
   const showSnackbar = (message: string) => {
     setSnackbarMessage(message);
@@ -104,9 +105,16 @@ export default function LoginScreen() {
           label="Password"
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
+          secureTextEntry={!showPassword} // Toggle based on showPassword state
           mode="outlined"
           style={{ marginBottom: 10 }}
+          right={
+            <TextInput.Icon 
+              icon={showPassword ? "eye-off" : "eye"} 
+              onPress={() => setShowPassword(!showPassword)} 
+              forceTextInputFocus={false} // Prevents keyboard from closing when pressing the icon
+            />
+          }
         />
 
         <Button mode="contained" onPress={handleLogin} loading={loading} disabled={loading} style={{ borderRadius: 8, marginVertical: 10 }}>

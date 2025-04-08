@@ -6,6 +6,8 @@ import {
   Alert,
   ActivityIndicator,
   Modal,
+  TouchableOpacity,
+  RefreshControl,
 } from "react-native";
 import {
   TextInput,
@@ -15,21 +17,11 @@ import {
   Divider,
   IconButton,
   SegmentedButtons,
+  Chip,
 } from "react-native-paper";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
-} from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, deleteDoc, query, where } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import { getAuth } from "firebase/auth";
 import { Picker } from "@react-native-picker/picker";
@@ -54,6 +46,7 @@ export default function MyCameras() {
   const router = useRouter();
   const [cameras, setCameras] = useState<CameraData[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [editingCamera, setEditingCamera] = useState<CameraData | null>(null);
   const [filters, setFilters] = useState({
     city: "",
@@ -62,29 +55,29 @@ export default function MyCameras() {
     deviceType: "",
     dateChecked: "",
   });
-  const [lastDoc, setLastDoc] = useState<any>(null);
-  const [hasMore, setHasMore] = useState(true);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showFilterDatePicker, setShowFilterDatePicker] = useState(false);
   const [phoneError, setPhoneError] = useState("");
   const [showCustomDeviceTypeInput, setShowCustomDeviceTypeInput] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Popular CCTV camera types
   const deviceTypes = [
     "Dome Camera",
     "Bullet Camera",
     "PTZ Camera",
     "C-Mount Camera",
-    "Infrared/Night Vision Camera",
     "Other",
   ];
 
-  // Keep only one useEffect for filter changes
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    fetchUserCameras(true).then(() => setRefreshing(false));
+  }, []);
+
   useEffect(() => {
-    console.log("Filters changed, fetching cameras...", filters);
-    fetchUserCameras(true); // Reset the list when filters change
+    fetchUserCameras(true);
   }, [filters]);
-  
+
   const fetchUserCameras = async (reset = false) => {
     setLoading(true);
     try {
@@ -95,65 +88,33 @@ export default function MyCameras() {
         setLoading(false);
         return;
       }
-  
-      // Log the filters to ensure they are updating correctly
-      console.log("Current Filters:", filters);
-  
+
       let baseQuery = collection(db, "cctv_cameras");
-      // Only show cameras added by the logged-in user
       let filteredQuery = query(baseQuery, where("username", "==", user.email));
-  
-      // Apply additional filters (only if the filter value is not empty)
-      if (filters.city && filters.city.trim() !== "") {
+
+      if (filters.city) {
         filteredQuery = query(filteredQuery, where("city", "==", filters.city));
       }
-      if (filters.organization && filters.organization.trim() !== "") {
+      if (filters.organization) {
         filteredQuery = query(filteredQuery, where("organization", "==", filters.organization));
       }
-      if (filters.workingCondition && filters.workingCondition.trim() !== "") {
+      if (filters.workingCondition) {
         filteredQuery = query(filteredQuery, where("workingCondition", "==", filters.workingCondition));
       }
-      if (filters.deviceType && filters.deviceType.trim() !== "") {
+      if (filters.deviceType) {
         filteredQuery = query(filteredQuery, where("deviceType", "==", filters.deviceType));
       }
-      if (filters.dateChecked && filters.dateChecked.trim() !== "") {
+      if (filters.dateChecked) {
         filteredQuery = query(filteredQuery, where("dateChecked", "==", filters.dateChecked));
       }
-  
-      // Reset pagination when filters change
-      if (reset) {
-        setLastDoc(null);
-        setHasMore(true);
-      }
-  
-      // Add pagination
-      if (!reset && lastDoc) {
-        filteredQuery = query(filteredQuery, startAfter(lastDoc), limit(5));
-      } else {
-        filteredQuery = query(filteredQuery, limit(5));
-      }
-  
+
       const snapshot = await getDocs(filteredQuery);
-      if (snapshot.empty) {
-        if (reset) {
-          setCameras([]); // Clear the cameras list when filter returns no results
-        }
-        setHasMore(false);
-        setLoading(false);
-        return;
-      }
-  
-      // Log the query results
-      console.log("Query Results:", snapshot.docs.map((doc) => doc.data()));
-  
       const newCameras = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       })) as CameraData[];
-  
-      // Use functional updates to avoid stale state issues
-      setCameras(prevCameras => reset ? newCameras : [...prevCameras, ...newCameras]);
-      setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
+
+      setCameras(newCameras);
     } catch (error) {
       console.error("Error fetching cameras:", error);
       Alert.alert("Error", "Failed to load cameras.");
@@ -185,19 +146,18 @@ export default function MyCameras() {
   };
 
   const validatePhoneNumber = (phone: string) => {
-    const phoneRegex = /^\d{10}$/; // Regex to check if the phone number is exactly 10 digits
+    const phoneRegex = /^\d{10}$/;
     return phoneRegex.test(phone);
   };
 
   const handleSaveChanges = async () => {
     if (!editingCamera) return;
 
-    // Validate phone number
     if (!validatePhoneNumber(editingCamera.phoneNumber)) {
       setPhoneError("Phone number must be exactly 10 digits.");
       return;
     } else {
-      setPhoneError(""); // Clear error if phone number is valid
+      setPhoneError("");
     }
 
     setLoading(true);
@@ -226,263 +186,415 @@ export default function MyCameras() {
     });
   };
 
-  const loadMoreCameras = () => {
-    if (!loading && hasMore) {
-      fetchUserCameras(false);
-    }
+  const getStatusColor = (status: string) => {
+    return status === "Working" ? "#4CAF50" : "#F44336";
   };
 
   return (
-    <ScrollView 
+    <ScrollView
       contentContainerStyle={styles.container}
-      onScroll={({ nativeEvent }) => {
-        const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-        const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 20;
-        if (isCloseToBottom && !loading && hasMore) {
-          loadMoreCameras();
-        }
-      }}
-      scrollEventThrottle={400}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      }
     >
-      <Text style={styles.title}>My CCTV Cameras</Text>
-      <View style={styles.filtersContainer}>
-        {/* Working Condition Toggle */}
-        <SegmentedButtons
-          value={filters.workingCondition}
-          onValueChange={(value) => setFilters((prev) => ({ ...prev, workingCondition: value }))}
-          buttons={[
-            { value: "Working", label: "Working" },
-            { value: "Not Working", label: "Not Working" },
-            { value: "", label: "All" }, // Reset filter
-          ]}
-          style={styles.segmentedButtons}
-        />
-
-        {Object.keys(filters).map((key) => (
-          <React.Fragment key={key}>
-            {key === "dateChecked" ? (
-              <View>
-                <Button
-                  mode="outlined"
-                  onPress={() => setShowFilterDatePicker(true)}
-                  style={styles.dateButton}
-                >
-                  {filters.dateChecked || "Select Date Checked"}
-                </Button>
-                {showFilterDatePicker && (
-                  <DateTimePicker
-                    value={new Date(filters.dateChecked || Date.now())}
-                    mode="date"
-                    display="default"
-                    onChange={(event, date) => {
-                      setShowFilterDatePicker(false);
-                      if (date) {
-                        setFilters((prev) => ({
-                          ...prev,
-                          dateChecked: date.toISOString().split("T")[0],
-                        }));
-                      }
-                    }}
-                  />
-                )}
-              </View>
-            ) : key === "deviceType" ? (
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={filters.deviceType}
-                  onValueChange={(itemValue) => {
-                    if (itemValue === "Other") {
-                      setShowCustomDeviceTypeInput(true);
-                      setFilters((prev) => ({ ...prev, deviceType: "" }));
-                    } else {
-                      setShowCustomDeviceTypeInput(false);
-                      setFilters((prev) => ({ ...prev, deviceType: itemValue }));
-                    }
-                  }}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="Select Device Type" value="" />
-                  {deviceTypes.map((type, index) => (
-                    <Picker.Item key={index} label={type} value={type} />
-                  ))}
-                </Picker>
-                {showCustomDeviceTypeInput && (
-                  <TextInput
-                    label="Enter Custom Device Type"
-                    value={filters.deviceType}
-                    onChangeText={(text) => setFilters((prev) => ({ ...prev, deviceType: text }))}
-                    style={styles.input}
-                    mode="outlined"
-                  />
-                )}
-              </View>
-            ) : key !== "workingCondition" && (
-              <TextInput
-                label={`Filter by ${key
-                  .replace("dateChecked", "Date Checked")
-                  .replace("city", "City")
-                  .replace("organization", "Organization")
-                  .replace("deviceType", "Device Type")}`}
-                value={filters[key as keyof typeof filters]}
-                onChangeText={(text) => setFilters((prev) => ({ ...prev, [key]: text }))}
-                style={styles.input}
-                mode="outlined"
-              />
-            )}
-          </React.Fragment>
-        ))}
-
-        {/* Reset Filters Button */}
-        <Button mode="outlined" onPress={resetFilters} style={styles.resetButton}>
-          Reset Filters
+      <View style={styles.header}>
+        <Text style={styles.title}>My CCTV Cameras</Text>
+        <Button
+          mode="outlined"
+          onPress={() => setShowFilters(!showFilters)}
+          style={styles.filterToggle}
+          icon={showFilters ? "filter-off" : "filter"}
+        >
+          {showFilters ? "Hide Filters" : "Filters"}
         </Button>
       </View>
 
-      {loading && <ActivityIndicator size="large" color="#4A90E2" />}
+      {showFilters && (
+        <Card style={styles.filterCard}>
+          <Card.Content>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>Filter Cameras</Text>
+              <Button mode="text" onPress={resetFilters}>
+                Reset
+              </Button>
+            </View>
+
+            <SegmentedButtons
+              value={filters.workingCondition}
+              onValueChange={(value) => setFilters((prev) => ({ ...prev, workingCondition: value }))}
+              buttons={[
+                {
+                  value: "Working",
+                  label: "Working",
+                  icon: "check",
+                  style: filters.workingCondition === "Working" ? styles.activeFilterButton : null,
+                },
+                {
+                  value: "Not Working",
+                  label: "Not Working",
+                  icon: "close",
+                  style: filters.workingCondition === "Not Working" ? styles.activeFilterButton : null,
+                },
+                {
+                  value: "",
+                  label: "All",
+                  icon: "filter-variant",
+                  style: !filters.workingCondition ? styles.activeFilterButton : null,
+                },
+              ]}
+              style={styles.segmentedButtons}
+            />
+
+            <TextInput
+              label="City"
+              value={filters.city}
+              onChangeText={(text) => setFilters((prev) => ({ ...prev, city: text }))}
+              style={styles.input}
+              mode="outlined"
+              left={<TextInput.Icon icon="city" />}
+            />
+
+            <TextInput
+              label="Organization"
+              value={filters.organization}
+              onChangeText={(text) => setFilters((prev) => ({ ...prev, organization: text }))}
+              style={styles.input}
+              mode="outlined"
+              left={<TextInput.Icon icon="office-building" />}
+            />
+
+            <View style={styles.pickerContainer}>
+              <Text style={styles.pickerLabel}>Device Type</Text>
+              <Picker
+                selectedValue={filters.deviceType}
+                onValueChange={(itemValue) => {
+                  if (itemValue === "Other") {
+                    setShowCustomDeviceTypeInput(true);
+                    setFilters((prev) => ({ ...prev, deviceType: "" }));
+                  } else {
+                    setShowCustomDeviceTypeInput(false);
+                    setFilters((prev) => ({ ...prev, deviceType: itemValue }));
+                  }
+                }}
+                style={styles.picker}
+              >
+                <Picker.Item label="All Device Types" value="" />
+                {deviceTypes.map((type, index) => (
+                  <Picker.Item key={index} label={type} value={type} />
+                ))}
+              </Picker>
+            </View>
+
+            <Button
+              mode="outlined"
+              onPress={() => setShowFilterDatePicker(true)}
+              style={styles.dateButton}
+              icon="calendar"
+            >
+              {filters.dateChecked || "Filter by Date"}
+            </Button>
+            {showFilterDatePicker && (
+              <DateTimePicker
+                value={new Date(filters.dateChecked || Date.now())}
+                mode="date"
+                display="default"
+                maximumDate={new Date()}
+                onChange={(event, date) => {
+                  setShowFilterDatePicker(false);
+                  if (date) {
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    setFilters((prev) => ({
+                      ...prev,
+                      dateChecked: `${year}-${month}-${day}`,
+                    }));
+                  }
+                }}
+              />
+            )}
+          </Card.Content>
+        </Card>
+      )}
+
+      {loading && !refreshing && (
+        <ActivityIndicator size="large" color="#6200EE" style={styles.loader} />
+      )}
 
       {cameras.length === 0 && !loading && (
-        <Text style={styles.noResultsText}>No cameras found matching the current filters.</Text>
+        <Card style={styles.emptyCard}>
+          <Card.Content style={styles.emptyContent}>
+            <View style={styles.emptyIcon}>
+              <IconButton
+                icon="camera-off"
+                iconColor="#9E9E9E"
+                size={40}
+                disabled={true}
+                style={{ backgroundColor: 'transparent' }}
+              />
+            </View>
+            <Text style={styles.emptyText}>No cameras found</Text>
+            <Text style={styles.emptySubtext}>
+              {Object.values(filters).some(Boolean)
+                ? "Try adjusting your filters"
+                : "Add a new camera to get started"}
+            </Text>
+          </Card.Content>
+        </Card>
       )}
 
       {cameras.map((camera) => (
-        <Card key={camera.id} style={styles.card}>
+        <Card key={camera.id} style={styles.cameraCard}>
           <Card.Content>
-            <Text style={styles.cameraTitle}>{camera.deviceName}</Text>
-            <Text style={styles.subtitle}>📍 {camera.address}</Text>
-            <Text>👤 {camera.ownerName}</Text>
-            <Text>📞 {camera.phoneNumber}</Text>
-            <Text>🏢 {camera.organization}</Text>
-            <Text>🔧 {camera.workingCondition}</Text>
-            <Text>📅 Last Checked: {camera.dateChecked}</Text>
-            <Text>📡 Device Type: {camera.deviceType}</Text>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cameraTitle}>{camera.deviceName}</Text>
+              <Chip
+                mode="outlined"
+                style={[
+                  styles.statusChip,
+                  { backgroundColor: getStatusColor(camera.workingCondition) + "22" },
+                ]}
+                textStyle={{ color: getStatusColor(camera.workingCondition) }}
+              >
+                {camera.workingCondition}
+              </Chip>
+            </View>
+
+            <View style={styles.infoRow}>
+              <IconButton icon="account" size={20} iconColor="#6200EE" style={styles.infoIcon} />
+              <Text style={styles.infoText}>{camera.ownerName}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <IconButton icon="phone" size={20} iconColor="#6200EE" style={styles.infoIcon} />
+              <Text style={styles.infoText}>{camera.phoneNumber}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <IconButton icon="map-marker" size={20} iconColor="#6200EE" style={styles.infoIcon} />
+              <Text style={styles.infoText}>
+                {camera.address}, {camera.city}
+              </Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <IconButton icon="office-building" size={20} iconColor="#6200EE" style={styles.infoIcon} />
+              <Text style={styles.infoText}>{camera.organization}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <IconButton icon="calendar" size={20} iconColor="#6200EE" style={styles.infoIcon} />
+              <Text style={styles.infoText}>Last checked: {camera.dateChecked}</Text>
+            </View>
+
+            <View style={styles.infoRow}>
+              <IconButton icon="cctv" size={20} iconColor="#6200EE" style={styles.infoIcon} />
+              <Text style={styles.infoText}>{camera.deviceType}</Text>
+            </View>
+
             <Divider style={styles.divider} />
-            <View style={styles.buttonRow}>
-              <IconButton icon="pencil" onPress={() => setEditingCamera(camera)} />
-              <IconButton icon="delete" onPress={() => handleDelete(camera.id)} />
+
+            <View style={styles.cardActions}>
+              <Button
+                mode="contained-tonal"
+                onPress={() => setEditingCamera(camera)}
+                style={styles.actionButton}
+                icon="pencil"
+              >
+                Edit
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={() => handleDelete(camera.id)}
+                style={styles.actionButton}
+                icon="delete"
+                textColor="#F44336"
+              >
+                Delete
+              </Button>
             </View>
           </Card.Content>
         </Card>
       ))}
 
-      {hasMore && !loading && cameras.length > 0 && (
-        <Button mode="text" onPress={loadMoreCameras} style={styles.loadMoreButton}>
-          Load More
-        </Button>
-      )}
-
       {editingCamera && (
         <Modal visible={!!editingCamera} transparent={true} animationType="slide">
-          <View style={styles.modalContainer}>
-            <Card style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Edit Camera Details</Text>
-              <TextInput
-                label="Device Name"
-                value={editingCamera.deviceName}
-                onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, deviceName: text }))}
-                style={styles.input}
-                mode="outlined"
-              />
-              <TextInput
-                label="Owner Name"
-                value={editingCamera.ownerName}
-                onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, ownerName: text }))}
-                style={styles.input}
-                mode="outlined"
-              />
-              <TextInput
-                label="Phone Number"
-                value={editingCamera.phoneNumber}
-                onChangeText={(text) => {
-                  setEditingCamera((prev) => ({ ...prev!, phoneNumber: text }));
-                  setPhoneError(""); // Clear error when user types
-                }}
-                style={styles.input}
-                mode="outlined"
-                keyboardType="numeric"
-              />
-              {phoneError ? <Text style={styles.errorText}>{phoneError}</Text> : null}
-              <TextInput
-                label="Address"
-                value={editingCamera.address}
-                onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, address: text }))}
-                style={styles.input}
-                mode="outlined"
-              />
-              <TextInput
-                label="City"
-                value={editingCamera.city}
-                onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, city: text }))}
-                style={styles.input}
-                mode="outlined"
-              />
-              <TextInput
-                label="Organization"
-                value={editingCamera.organization}
-                onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, organization: text }))}
-                style={styles.input}
-                mode="outlined"
-              />
-              <View style={styles.pickerContainer}>
-                <Text style={styles.pickerLabel}>Device Type</Text>
-                <Picker
-                  selectedValue={editingCamera.deviceType}
-                  onValueChange={(itemValue) => {
-                    if (itemValue === "Other") {
-                      setShowCustomDeviceTypeInput(true);
-                    } else {
-                      setShowCustomDeviceTypeInput(false);
-                      setEditingCamera((prev) => ({ ...prev!, deviceType: itemValue }));
-                    }
+          <View style={styles.modalOverlay}>
+            <Card style={styles.modalCard}>
+              <Card.Content>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Edit Camera</Text>
+                  <IconButton
+                    icon="close"
+                    onPress={() => setEditingCamera(null)}
+                    style={styles.closeButton}
+                  />
+                </View>
+
+                <TextInput
+                  label="Device Name *"
+                  value={editingCamera.deviceName}
+                  onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, deviceName: text }))}
+                  style={styles.modalInput}
+                  mode="outlined"
+                  left={<TextInput.Icon icon="cctv" />}
+                />
+
+                <TextInput
+                  label="Owner Name *"
+                  value={editingCamera.ownerName}
+                  onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, ownerName: text }))}
+                  style={styles.modalInput}
+                  mode="outlined"
+                  left={<TextInput.Icon icon="account" />}
+                />
+
+                <TextInput
+                  label="Phone Number *"
+                  value={editingCamera.phoneNumber}
+                  onChangeText={(text) => {
+                    setEditingCamera((prev) => ({ ...prev!, phoneNumber: text }));
+                    setPhoneError("");
                   }}
-                  style={styles.picker}
-                >
-                  {deviceTypes.map((type, index) => (
-                    <Picker.Item key={index} label={type} value={type} />
-                  ))}
-                </Picker>
+                  style={styles.modalInput}
+                  mode="outlined"
+                  keyboardType="phone-pad"
+                  left={<TextInput.Icon icon="phone" />}
+                  error={!!phoneError}
+                />
+                {phoneError && <Text style={styles.errorText}>{phoneError}</Text>}
+
+                <TextInput
+                  label="Address"
+                  value={editingCamera.address}
+                  onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, address: text }))}
+                  style={styles.modalInput}
+                  mode="outlined"
+                  left={<TextInput.Icon icon="map-marker" />}
+                />
+
+                <TextInput
+                  label="City"
+                  value={editingCamera.city}
+                  onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, city: text }))}
+                  style={styles.modalInput}
+                  mode="outlined"
+                  left={<TextInput.Icon icon="city" />}
+                />
+
+                <TextInput
+                  label="Organization"
+                  value={editingCamera.organization}
+                  onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, organization: text }))}
+                  style={styles.modalInput}
+                  mode="outlined"
+                  left={<TextInput.Icon icon="office-building" />}
+                />
+
+                <View style={styles.pickerContainer}>
+                  <Text style={styles.pickerLabel}>Device Type *</Text>
+                  <Picker
+                    selectedValue={editingCamera.deviceType}
+                    onValueChange={(itemValue) => {
+                      if (itemValue === "Other") {
+                        setShowCustomDeviceTypeInput(true);
+                      } else {
+                        setShowCustomDeviceTypeInput(false);
+                        setEditingCamera((prev) => ({ ...prev!, deviceType: itemValue }));
+                      }
+                    }}
+                    style={styles.picker}
+                  >
+                    {deviceTypes.map((type, index) => (
+                      <Picker.Item key={index} label={type} value={type} />
+                    ))}
+                  </Picker>
+                </View>
+
                 {showCustomDeviceTypeInput && (
                   <TextInput
                     label="Enter Custom Device Type"
                     value={editingCamera.deviceType}
                     onChangeText={(text) => setEditingCamera((prev) => ({ ...prev!, deviceType: text }))}
-                    style={styles.input}
+                    style={styles.modalInput}
                     mode="outlined"
                   />
                 )}
-              </View>
-              <Button mode="contained" onPress={() => setShowDatePicker(true)} style={styles.button}>
-                {editingCamera.dateChecked || "Select Date Checked"}
-              </Button>
-              {showDatePicker && (
-                <DateTimePicker
-                  value={new Date(editingCamera.dateChecked || Date.now())}
-                  mode="date"
-                  display="default"
-                  onChange={(event, date) => {
-                    setShowDatePicker(false);
-                    if (date) {
-                      setEditingCamera((prev) => ({ ...prev!, dateChecked: date.toISOString().split("T")[0] }));
-                    }
-                  }}
+
+                <TouchableOpacity
+                  onPress={() => setShowDatePicker(true)}
+                  style={styles.dateInput}
+                >
+                  <TextInput
+                    label="Date Checked *"
+                    value={editingCamera.dateChecked}
+                    style={styles.modalInput}
+                    mode="outlined"
+                    editable={false}
+                    left={<TextInput.Icon icon="calendar" />}
+                  />
+                </TouchableOpacity>
+                {showDatePicker && (
+                  <DateTimePicker
+                    value={new Date(editingCamera.dateChecked || Date.now())}
+                    mode="date"
+                    display="default"
+                    maximumDate={new Date()}
+                    onChange={(event, date) => {
+                      setShowDatePicker(false);
+                      if (date) {
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        setEditingCamera((prev) => ({
+                          ...prev!,
+                          dateChecked: `${year}-${month}-${day}`,
+                        }));
+                      }
+                    }}
+                  />
+                )}
+
+                <SegmentedButtons
+                  value={editingCamera.workingCondition}
+                  onValueChange={(value) =>
+                    setEditingCamera((prev) => ({ ...prev!, workingCondition: value }))
+                  }
+                  buttons={[
+                    {
+                      value: "Working",
+                      label: "Working",
+                      icon: "check",
+                      style:
+                        editingCamera.workingCondition === "Working"
+                          ? styles.activeStatusButton
+                          : null,
+                    },
+                    {
+                      value: "Not Working",
+                      label: "Not Working",
+                      icon: "close",
+                      style:
+                        editingCamera.workingCondition === "Not Working"
+                          ? styles.inactiveStatusButton
+                          : null,
+                    },
+                  ]}
+                  style={styles.statusButtons}
                 />
-              )}
-              <SegmentedButtons
-                value={editingCamera.workingCondition}
-                onValueChange={(value) => setEditingCamera((prev) => ({ ...prev!, workingCondition: value }))}
-                buttons={[
-                  { value: "Working", label: "Working" },
-                  { value: "Not Working", label: "Not Working" },
-                ]}
-                style={styles.segmentedButtons}
-              />
-              <View style={styles.buttonRow}>
-                <Button mode="contained" onPress={handleSaveChanges} style={styles.saveButton}>
-                  <Text style={styles.buttonText}>Save Changes</Text>
-                </Button>
-                <Button mode="contained" onPress={() => setEditingCamera(null)} style={styles.cancelButton}>
-                  <Text style={styles.buttonText}>Cancel</Text>
-                </Button>
-              </View>
+
+                <View style={styles.modalActions}>
+                  <Button
+                    mode="contained"
+                    onPress={handleSaveChanges}
+                    style={styles.saveButton}
+                    loading={loading}
+                    disabled={loading}
+                  >
+                    Save Changes
+                  </Button>
+                </View>
+              </Card.Content>
             </Card>
           </View>
         </Modal>
@@ -492,74 +604,197 @@ export default function MyCameras() {
 }
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, backgroundColor: "#F7F9FC" },
-  title: { fontSize: 24, fontWeight: "bold", textAlign: "center", marginBottom: 20, color: "#333" },
-  modalTitle: { fontSize: 20, fontWeight: "bold", textAlign: "center", marginBottom: 16, color: "#333" },
-  filtersContainer: { marginBottom: 16 },
-  input: { marginBottom: 10, backgroundColor: "#FFF" },
-  card: { marginBottom: 16, padding: 16, backgroundColor: "#FFF", borderRadius: 8, elevation: 2 },
-  cameraTitle: { fontSize: 18, fontWeight: "bold", color: "#333" },
-  subtitle: { fontSize: 14, color: "#666" },
-  divider: { marginVertical: 8, backgroundColor: "#EEE" },
-  buttonRow: { flexDirection: "row", justifyContent: "space-between", marginTop: 10 },
-  modalContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(0,0,0,0.5)" },
-  modalContent: { padding: 20, borderRadius: 10, width: "85%", backgroundColor: "#FFF" },
-  button: { marginVertical: 10, backgroundColor: "#4A90E2" },
-  saveButton: {
-    flex: 1,
-    marginRight: 5,
-    backgroundColor: "#4A90E2",
-    borderRadius: 5,
-    justifyContent: "center",
+  container: {
+    flexGrow: 1,
+    padding: 16,
+    backgroundColor: "#F5F5F5",
   },
-  cancelButton: {
-    flex: 1,
-    marginLeft: 5,
-    backgroundColor: "#E63946",
-    borderRadius: 5,
-    justifyContent: "center",
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
   },
-  buttonText: {
-    color: "#FFF",
+  title: {
+    fontSize: 24,
     fontWeight: "bold",
-    textAlign: "center",
+    color: "#333",
   },
-  segmentedButtons: { marginVertical: 10 },
-  errorText: {
-    color: "#E63946",
-    fontSize: 12,
-    marginBottom: 10,
+  filterToggle: {
+    borderRadius: 8,
   },
-  dateButton: {
-    marginBottom: 10,
+  filterCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  filterHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  filterTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  activeFilterButton: {
+    backgroundColor: "#E3F2FD",
+  },
+  segmentedButtons: {
+    marginBottom: 12,
+  },
+  input: {
+    marginBottom: 12,
     backgroundColor: "#FFF",
   },
   pickerContainer: {
-    marginBottom: 10,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+    borderRadius: 4,
+    overflow: "hidden",
+    backgroundColor: "#FFF",
   },
   pickerLabel: {
-    fontSize: 14,
-    marginBottom: 4,
-    color: "#555",
+    padding: 8,
+    fontSize: 12,
+    color: "#616161",
   },
   picker: {
+    height: 50,
+  },
+  dateButton: {
+    marginBottom: 12,
     backgroundColor: "#FFF",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
   },
-  resetButton: {
-    marginTop: 10,
-    backgroundColor: "#FFF",
-    borderColor: "#4A90E2",
+  loader: {
+    marginVertical: 24,
   },
-  loadMoreButton: {
-    marginVertical: 10,
+  emptyCard: {
+    marginVertical: 16,
+    borderRadius: 12,
+    elevation: 1,
   },
-  noResultsText: {
+  emptyContent: {
+    paddingVertical: 40,
+    alignItems: "center",
+  },
+  emptyIcon: {
+    marginBottom: 16,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#616161",
+    marginBottom: 4,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: "#9E9E9E",
     textAlign: "center",
-    marginTop: 20,
-    fontSize: 16,
-    color: "#666",
+  },
+  cameraCard: {
+    marginBottom: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  cameraTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    flex: 1,
+  },
+  statusChip: {
+    marginLeft: 8,
+    borderWidth: 0,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  infoIcon: {
+    margin: 0,
+    marginRight: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#424242",
+    flex: 1,
+  },
+  divider: {
+    marginVertical: 12,
+    backgroundColor: "#EEEEEE",
+  },
+  cardActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  actionButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    padding: 16,
+  },
+  modalCard: {
+    width: "100%",
+    maxHeight: "90%",
+    borderRadius: 12,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  closeButton: {
+    margin: 0,
+  },
+  modalInput: {
+    marginBottom: 12,
+    backgroundColor: "#FFF",
+  },
+  dateInput: {
+    marginBottom: 12,
+  },
+  activeStatusButton: {
+    backgroundColor: "#E8F5E9",
+  },
+  inactiveStatusButton: {
+    backgroundColor: "#FFEBEE",
+  },
+  statusButtons: {
+    marginBottom: 16,
+  },
+  modalActions: {
+    marginTop: 8,
+  },
+  saveButton: {
+    borderRadius: 8,
+    backgroundColor: "#6200EE",
+  },
+  errorText: {
+    color: "#F44336",
+    fontSize: 12,
+    marginBottom: 12,
+    marginLeft: 8,
   },
 });

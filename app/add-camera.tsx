@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
 } from "react-native";
-import { TextInput, Button, Text } from "react-native-paper";
+import { TextInput, Button, Text, Surface, SegmentedButtons, IconButton } from "react-native-paper";
 import { useRouter } from "expo-router";
 import * as Location from "expo-location";
 import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
@@ -30,13 +30,12 @@ interface FormData {
   address: string;
   city: string;
   organization: string;
-  workingCondition: string; // "Working" or "Not Working"
+  workingCondition: string;
   username?: string;
   policeId?: string;
   dateChecked?: string;
 }
 
-// Validation function: returns first encountered error report.
 const validateExcelData = async (data: any[], userData: { username: string; policeId: string } | null): Promise<{ valid: boolean; report: string[] }> => {
   const requiredColumns = [
     "ownerName",
@@ -58,27 +57,30 @@ const validateExcelData = async (data: any[], userData: { username: string; poli
   for (let index = 0; index < data.length; index++) {
     const row = data[index];
 
-    // Check for missing required columns
     for (let col of requiredColumns) {
       if (!row[col] || row[col].toString().trim() === "") {
         errors.push(`Row ${index + 1} is missing value for "${col}".`);
-        console.log(`Row ${index + 1} is missing value for "${col}".`);
       }
     }
 
-    // Validate phone number format (if present)
     if (row["phoneNumber"] && !/^\d{10}$/.test(row["phoneNumber"].toString().trim())) {
       errors.push(`Row ${index + 1} has an invalid phone number: "${row["phoneNumber"]}".`);
-      console.log(`Row ${index + 1} has an invalid phone number: "${row["phoneNumber"]}".`);
     }
 
-    // Validate date format (if present)
-    if (row["dateChecked"] && !/^\d{4}-\d{2}-\d{2}$/.test(row["dateChecked"].toString().trim())) {
-      errors.push(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
-      console.log(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
+    if (row["dateChecked"]) {
+      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRegex.test(row["dateChecked"].toString().trim())) {
+        errors.push(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
+      } else {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const inputDate = new Date(row["dateChecked"]);
+        if (inputDate > today) {
+          errors.push(`Row ${index + 1} has a future date: "${row["dateChecked"]}".`);
+        }
+      }
     }
 
-    // Check for duplicates
     const camerasRef = collection(db, "cctv_cameras");
     const q = query(
       camerasRef,
@@ -90,7 +92,6 @@ const validateExcelData = async (data: any[], userData: { username: string; poli
     const querySnapshot = await getDocs(q);
     if (!querySnapshot.empty) {
       errors.push(`Row ${index + 1} is a duplicate entry: Device "${row.deviceName}" at (${row.latitude}, ${row.longitude}) already exists.`);
-      console.log(`Row ${index + 1} is a duplicate entry: Device "${row.deviceName}" at (${row.latitude}, ${row.longitude}) already exists.`);
     }
   }
 
@@ -117,6 +118,7 @@ export default function AddCamera() {
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCustomDeviceTypeInput, setShowCustomDeviceTypeInput] = useState(false);
+  const [activeTab, setActiveTab] = useState("form");
 
   useEffect(() => {
     const authInstance = getAuth();
@@ -137,10 +139,35 @@ export default function AddCamera() {
   };
 
   const onDateChange = (event: any, selectedDate?: Date) => {
-    const currentDate = selectedDate || date;
+    // Hide the date picker regardless of selection
     setShowDatePicker(false);
-    setDate(currentDate);
-    handleInputChange("dateChecked", currentDate.toISOString().split("T")[0]); // Format as YYYY-MM-DD
+    
+    // Return if user cancelled the selection
+    if (!selectedDate) return;
+    
+    // Create comparison dates at midnight to ignore time components
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const selectedDay = new Date(selectedDate);
+    selectedDay.setHours(0, 0, 0, 0);
+    
+    // Check if selected date is in the future
+    if (selectedDay > today) {
+      Alert.alert("Invalid Date", "You cannot select a future date.");
+      return;
+    }
+    
+    // Update the state with the selected date
+    setDate(selectedDate);
+    
+    // Format the date correctly without timezone conversion
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+    const day = String(selectedDate.getDate()).padStart(2, '0');
+    
+    // Update the form data with properly formatted date
+    handleInputChange("dateChecked", `${year}-${month}-${day}`);
   };
 
   const getLocation = async () => {
@@ -151,19 +178,68 @@ export default function AddCamera() {
       setLoading(false);
       return;
     }
-    let location = await Location.getCurrentPositionAsync({});
-    handleInputChange("latitude", location.coords.latitude.toString());
-    handleInputChange("longitude", location.coords.longitude.toString());
-    let geocode = await Location.reverseGeocodeAsync(location.coords);
-    if (geocode.length > 0) {
-      const addr = [geocode[0].name, geocode[0].city, geocode[0].region]
-        .filter(Boolean)
-        .join(", ");
-      handleInputChange("address", addr);
+  
+    try {
+      // Get device coordinates
+      let location = await Location.getCurrentPositionAsync({});
+      const { latitude, longitude } = location.coords;
+      
+      handleInputChange("latitude", latitude.toString());
+      handleInputChange("longitude", longitude.toString());
+  
+      // Use Nominatim reverse geocoding
+      let url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`;
+      
+      let response = await fetch(url, {
+        headers: {
+          "User-Agent": "YourAppName/1.0 (your@email.com)",
+          "Accept": "application/json"
+        }
+      });
+  
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+  
+      let data = await response.json();
+      console.log("Nominatim reverse geocode:", data);
+  
+      if (data.address) {
+        const { address, display_name } = data;
+        
+        // Use display_name as primary address source (most complete)
+        let formattedAddress = display_name;
+        
+        // Remove any Plus Codes if present
+        formattedAddress = formattedAddress.replace(/[A-Z0-9]+\+[A-Z0-9]+,\s*/g, '');
+        
+        handleInputChange("address", formattedAddress);
+  
+        // City detection - try standard fields in order of specificity
+        const cityFields = [
+          'city',
+          'town', 
+          'village',
+          'municipality',
+          'county',
+          'state_district'
+        ];
+        
+        let city = data.address.state_district;
+        
+        
+        handleInputChange("city", city || "");
+  
+      } else {
+        handleInputChange("address", `Near ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`);
+        handleInputChange("city", "");
+      }
+  
+    } catch (error) {
+      console.error("Location Error:", error);
+      Alert.alert("Error", "Failed to get address details. Please try again or enter manually.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
-
   const validateForm = (): boolean => {
     const { city, organization, ownerName, phoneNumber, deviceName, deviceType, latitude, longitude, address, workingCondition, dateChecked } = formData;
     if (!city || !organization || !ownerName || !phoneNumber || !deviceName || !deviceType || !latitude || !longitude || !address || !workingCondition || !dateChecked) {
@@ -186,7 +262,6 @@ export default function AddCamera() {
     setLoading(true);
 
     try {
-      // Check for duplicates
       const camerasRef = collection(db, "cctv_cameras");
       const q = query(
         camerasRef,
@@ -198,7 +273,6 @@ export default function AddCamera() {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        // Duplicate found
         Alert.alert(
           "Duplicate Entry",
           "A camera with the same details already exists. Do you want to proceed?",
@@ -227,7 +301,6 @@ export default function AddCamera() {
           ]
         );
       } else {
-        // No duplicate found, proceed with submission
         const finalData = {
           ...formData,
           username: userData?.username,
@@ -251,12 +324,8 @@ export default function AddCamera() {
         type: "*/*",
         copyToCacheDirectory: true,
       });
-      console.log("Document Picker Result:", res);
 
-      if (res.canceled) {
-        console.log("User cancelled the picker");
-        return;
-      }
+      if (res.canceled) return;
 
       if (!res.assets || res.assets.length === 0) {
         Alert.alert("Error", "No file was selected.");
@@ -266,12 +335,8 @@ export default function AddCamera() {
       const fileUri: string | undefined = asset.uri;
       const fileName: string | undefined = asset.name;
 
-      if (!fileUri) {
-        Alert.alert("Error", "File URI is undefined.");
-        return;
-      }
-      if (!fileName) {
-        Alert.alert("Error", "File name is undefined.");
+      if (!fileUri || !fileName) {
+        Alert.alert("Error", "Invalid file selection.");
         return;
       }
 
@@ -304,25 +369,20 @@ export default function AddCamera() {
         return;
       }
 
-      // Validate data and check for duplicates
       const { valid, report } = await validateExcelData(parsedData, userData);
 
       if (!valid) {
         router.push({
           pathname: "/ValidationReportScreen",
-          params: { report: JSON.stringify(report) }, // Encode as JSON,
+          params: { report: JSON.stringify(report) },
         } as any);
         return;
       }
 
       setLoading(true);
-      console.log("Parsed Data:", parsedData);
 
-      // Upload each record after trimming and defaulting values.
       for (const record of parsedData) {
         if (record && typeof record === "object" && !Array.isArray(record)) {
-          console.log("Parsed record keys:", Object.keys(record));
-          console.log("Record policeId before trimming:", record.policeId);
           const finalData: FormData = {
             ownerName: (record.ownerName || "").trim(),
             phoneNumber: (record.phoneNumber || "").trim(),
@@ -338,8 +398,6 @@ export default function AddCamera() {
             policeId: (record.policeId || userData?.policeId || "UNKNOWN_ID").trim(),
             dateChecked: (record.dateChecked || new Date().toISOString().split("T")[0]).trim(),
           };
-
-          console.log("Final data being uploaded:", finalData);
           await addDoc(collection(db, "cctv_cameras"), finalData);
         }
       }
@@ -354,15 +412,14 @@ export default function AddCamera() {
     }
   };
 
-  // Download template file as CSV and save to local storage.
   const handleDownloadTemplate = async () => {
     const csvTemplate = `ownerName,phoneNumber,deviceName,deviceType,latitude,longitude,address,city,organization,workingCondition,policeId,dateChecked
 John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnagar,IIT Ropar,Working,PR12345,2023-10-01
 `;
-    const fileUri = FileSystem.documentDirectory + "template.csv";
+    const fileUri = FileSystem.documentDirectory + "cctv_template.csv";
     try {
       await FileSystem.writeAsStringAsync(fileUri, csvTemplate, { encoding: FileSystem.EncodingType.UTF8 });
-      Alert.alert("Template Downloaded", `Template saved as CSV in local storage:\n${fileUri}`);
+      Alert.alert("Template Downloaded", "Template saved as 'cctv_template.csv' in your documents.");
     } catch (error) {
       console.error("Error downloading template:", error);
       Alert.alert("Error", "Failed to download template.");
@@ -382,7 +439,7 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
           <Text
             style={[
               styles.conditionText,
-              formData.workingCondition === "Working" && styles.conditionButtonSelected,
+              formData.workingCondition === "Working" && styles.conditionTextSelected,
             ]}
           >
             Working
@@ -398,7 +455,7 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
           <Text
             style={[
               styles.conditionText,
-              formData.workingCondition === "Not Working" && styles.conditionButtonSelected,
+              formData.workingCondition === "Not Working" && styles.conditionTextSelected,
             ]}
           >
             Not Working
@@ -408,42 +465,12 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
     );
   };
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Add CCTV Camera</Text>
-
+  const renderFormTab = () => {
+    return (
       <View style={styles.formGroup}>
+        <Text style={styles.sectionTitle}>Device Information</Text>
         <TextInput
-          label="City"
-          mode="outlined"
-          value={formData.city}
-          onChangeText={(val) => handleInputChange("city", val)}
-          style={styles.input}
-        />
-        <TextInput
-          label="Organization"
-          mode="outlined"
-          value={formData.organization}
-          onChangeText={(val) => handleInputChange("organization", val)}
-          style={styles.input}
-        />
-        <TextInput
-          label="Owner Name"
-          mode="outlined"
-          value={formData.ownerName}
-          onChangeText={(val) => handleInputChange("ownerName", val)}
-          style={styles.input}
-        />
-        <TextInput
-          label="Phone Number"
-          mode="outlined"
-          value={formData.phoneNumber}
-          onChangeText={(val) => handleInputChange("phoneNumber", val)}
-          keyboardType="phone-pad"
-          style={styles.input}
-        />
-        <TextInput
-          label="Device Name"
+          label="Device Name *"
           mode="outlined"
           value={formData.deviceName}
           onChangeText={(val) => handleInputChange("deviceName", val)}
@@ -454,9 +481,10 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
             selectedValue={formData.deviceType}
             onValueChange={(itemValue) => {
               handleInputChange("deviceType", itemValue);
-              setShowCustomDeviceTypeInput(itemValue === "oth"); // Show custom input if "Other" is selected
+              setShowCustomDeviceTypeInput(itemValue === "oth");
             }}
           >
+            <Picker.Item label="Select Device Type *" value="" />
             <Picker.Item label="Dome Camera" value="dome" />
             <Picker.Item label="Bullet Camera" value="bullet" />
             <Picker.Item label="C-Mount Camera" value="cmount" />
@@ -466,37 +494,22 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
         </View>
         {showCustomDeviceTypeInput && (
           <TextInput
-            label="Custom Device Type"
+            label="Custom Device Type *"
             mode="outlined"
             value={formData.deviceType}
             onChangeText={(val) => handleInputChange("deviceType", val)}
             style={styles.input}
           />
         )}
-        <TextInput
-          label="Address"
-          mode="outlined"
-          value={formData.address}
-          onChangeText={(val) => handleInputChange("address", val)}
-          style={styles.input}
-        />
-        <TextInput
-          label="Latitude"
-          mode="outlined"
-          value={formData.latitude}
-          onChangeText={(val) => handleInputChange("latitude", val)}
-          style={styles.input}
-        />
-        <TextInput
-          label="Longitude"
-          mode="outlined"
-          value={formData.longitude}
-          onChangeText={(val) => handleInputChange("longitude", val)}
-          style={styles.input}
-        />
+        {renderWorkingConditionSelector()}
+        
         <View style={styles.input}>
-          <Button onPress={() => setShowDatePicker(true)} mode="outlined">
-            Select Date Checked
+          <Button 
+            onPress={() => setShowDatePicker(true)} 
+            mode="outlined"
+            icon="calendar"
+          >
+            Select Date Checked *
           </Button>
           {showDatePicker && (
             <DateTimePicker
@@ -504,56 +517,162 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
               mode="date"
               display="default"
               onChange={onDateChange}
+              maximumDate={new Date()}
             />
           )}
           <TextInput
-            label="Date Checked"
+            label="Date Checked *"
             mode="outlined"
             value={formData.dateChecked}
             editable={false}
-            style={styles.input}
+            style={{marginTop: 8}}
           />
         </View>
-        {renderWorkingConditionSelector()}
-      </View>
 
-      <View style={styles.buttonContainer}>
-        <Button
-          mode="contained"
-          onPress={getLocation}
-          style={[styles.button, styles.buttonPrimary]}
-          labelStyle={styles.buttonLabel}
-        >
-          Get Location
-        </Button>
+        <Text style={styles.sectionTitle}>Location Details</Text>
+        <View style={styles.locationContainer}>
+          <View style={styles.locationInputs}>
+            <TextInput
+              label="Latitude *"
+              mode="outlined"
+              value={formData.latitude}
+              onChangeText={(val) => handleInputChange("latitude", val)}
+              style={[styles.input, styles.locationInput]}
+              keyboardType="numeric"
+            />
+            <TextInput
+              label="Longitude *"
+              mode="outlined"
+              value={formData.longitude}
+              onChangeText={(val) => handleInputChange("longitude", val)}
+              style={[styles.input, styles.locationInput]}
+              keyboardType="numeric"
+            />
+          </View>
+          <IconButton
+            icon="crosshairs-gps"
+            size={24}
+            mode="contained"
+            onPress={getLocation}
+            style={styles.locationButton}
+            disabled={loading}
+          />
+        </View>
+        
+        <TextInput
+          label="Address *"
+          mode="outlined"
+          value={formData.address}
+          onChangeText={(val) => handleInputChange("address", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="City *"
+          mode="outlined"
+          value={formData.city}
+          onChangeText={(val) => handleInputChange("city", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Organization *"
+          mode="outlined"
+          value={formData.organization}
+          onChangeText={(val) => handleInputChange("organization", val)}
+          style={styles.input}
+        />
+
+        <Text style={styles.sectionTitle}>Owner Information</Text>
+        <TextInput
+          label="Owner Name *"
+          mode="outlined"
+          value={formData.ownerName}
+          onChangeText={(val) => handleInputChange("ownerName", val)}
+          style={styles.input}
+        />
+        <TextInput
+          label="Phone Number *"
+          mode="outlined"
+          value={formData.phoneNumber}
+          onChangeText={(val) => handleInputChange("phoneNumber", val)}
+          keyboardType="phone-pad"
+          style={styles.input}
+        />
 
         <Button
           mode="contained"
           onPress={handleSubmit}
-          style={[styles.button, styles.buttonSuccess]}
+          style={styles.submitButton}
           labelStyle={styles.buttonLabel}
+          loading={loading}
+          icon="check-circle"
         >
           Submit
         </Button>
-
-        <Button
-          mode="contained"
-          onPress={handleFileUpload}
-          style={[styles.button, styles.buttonDanger]}
-          labelStyle={styles.buttonLabel}
-        >
-          Upload
-        </Button>
-
-        <Button
-          mode="contained"
-          onPress={handleDownloadTemplate}
-          style={[styles.button, styles.buttonTemplate]}
-          labelStyle={styles.buttonLabel}
-        >
-          Download Template
-        </Button>
       </View>
+    );
+  };
+
+  const renderBulkUploadTab = () => {
+    return (
+      <View style={styles.formGroup}>
+        <Surface style={styles.templateSection}>
+          <Text style={styles.templateTitle}>Download Template</Text>
+          <Button
+            mode="contained"
+            onPress={handleDownloadTemplate}
+            style={styles.templateButton}
+            labelStyle={styles.buttonLabel}
+            icon="download"
+          >
+            Get Template File
+          </Button>
+        </Surface>
+        
+        <Surface style={styles.uploadSection}>
+          <Text style={styles.uploadTitle}>Upload Your File</Text>
+          <Text style={styles.uploadSubtitle}>CSV or Excel format only</Text>
+          <Button
+            mode="contained"
+            onPress={handleFileUpload}
+            style={styles.uploadButton}
+            labelStyle={styles.buttonLabel}
+            loading={loading}
+            icon="file-upload"
+          >
+            Select File
+          </Button>
+        </Surface>
+        
+        <Text style={styles.requirementsTitle}>Required Fields:</Text>
+        <Text style={styles.requirementsText}>
+          • ownerName, phoneNumber, deviceName, deviceType{'\n'}
+          • latitude, longitude, address, city{'\n'}
+          • organization, workingCondition, policeId{'\n'}
+          • dateChecked (YYYY-MM-DD, no future dates)
+        </Text>
+      </View>
+    );
+  };
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Add CCTV Camera</Text>
+      
+      <View style={styles.tabContainer}>
+        <SegmentedButtons
+          value={activeTab}
+          onValueChange={setActiveTab}
+          buttons={[
+            { value: 'form', label: 'Form Entry', icon: 'form-select' },
+            { value: 'bulk', label: 'Bulk Upload', icon: 'file-upload-outline' },
+          ]}
+          style={styles.segmentedButtons}
+        />
+      </View>
+
+      {loading && <ActivityIndicator style={styles.loader} size="large" color="#3B82F6" />}
+      
+      {activeTab === "form" ? renderFormTab() : renderBulkUploadTab()}
     </ScrollView>
   );
 }
@@ -561,96 +680,154 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    padding: 24,
-    backgroundColor: "#F7F9FC",
+    padding: 16,
+    backgroundColor: "#F5F7FA",
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "800",
-    marginBottom: 28,
+    marginBottom: 16,
     textAlign: "center",
     color: "#1A365D",
-    letterSpacing: 0.5,
+  },
+  tabContainer: {
+    marginBottom: 16,
+  },
+  segmentedButtons: {
+    marginHorizontal: 8,
   },
   formGroup: {
-    marginBottom: 24,
+    marginBottom: 16,
     backgroundColor: "#FFFFFF",
-    padding: 24,
-    borderRadius: 16,
+    padding: 16,
+    borderRadius: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+    marginTop: 8,
+    color: "#2D3748",
   },
   input: {
-    marginBottom: 16,
+    marginBottom: 12,
     backgroundColor: "#FAFBFF",
+  },
+  locationContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  locationInputs: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  locationInput: {
+    flex: 1,
+    marginRight: 8,
+  },
+  locationButton: {
+    backgroundColor: "#3B82F6",
+    marginLeft: 4,
   },
   conditionContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 8,
     marginBottom: 16,
   },
   conditionButton: {
     flex: 1,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: "#E2E8F0",
-    borderRadius: 10,
-    paddingVertical: 14,
-    marginHorizontal: 6,
+    borderRadius: 8,
+    paddingVertical: 12,
+    marginHorizontal: 4,
     backgroundColor: "#FAFBFF",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
   },
   conditionButtonSelected: {
-    backgroundColor: "#0EA5E9",
-    borderColor: "#0284C7",
-    color: "#FFFFFF",
+    backgroundColor: "#3B82F6",
+    borderColor: "#2563EB",
   },
   conditionText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
     color: "#475569",
   },
-  buttonContainer: {
-    flexDirection: "column",
-    alignItems: "center",
-    marginTop: 24,
+  conditionTextSelected: {
+    color: "#FFFFFF",
   },
-  button: {
-    width: "85%",
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: "center",
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  buttonPrimary: {
-    backgroundColor: "#3B82F6", // Blue
-  },
-  buttonSuccess: {
-    backgroundColor: "#10B981", // Green
-  },
-  buttonDanger: {
-    backgroundColor: "#F43F5E", // Red
-  },
-  buttonTemplate: {
-    backgroundColor: "#8B5CF6", // Purple
+  submitButton: {
+    marginTop: 16,
+    borderRadius: 8,
+    paddingVertical: 8,
+    backgroundColor: "#10B981",
   },
   buttonLabel: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
+    fontWeight: "600",
   },
+  templateSection: {
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+    backgroundColor: "#F0F9FF",
+    elevation: 1,
+    alignItems: 'center',
+  },
+  templateTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2B6CB0",
+    marginBottom: 12,
+  },
+  templateButton: {
+    backgroundColor: "#2B6CB0",
+    borderRadius: 8,
+    width: '100%',
+  },
+  uploadSection: {
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 8,
+    backgroundColor: "#F0FDF4",
+    elevation: 1,
+    alignItems: 'center',
+  },
+  uploadTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#047857",
+    marginBottom: 4,
+  },
+  uploadSubtitle: {
+    fontSize: 14,
+    color: "#4A5568",
+    marginBottom: 12,
+  },
+  uploadButton: {
+    backgroundColor: "#047857",
+    borderRadius: 8,
+    width: '100%',
+  },
+  requirementsTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#4A5568",
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  requirementsText: {
+    fontSize: 13,
+    color: "#4A5568",
+    lineHeight: 20,
+  },
+  loader: {
+    marginVertical: 16,
+  }
 });
