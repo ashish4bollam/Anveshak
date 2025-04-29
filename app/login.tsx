@@ -2,9 +2,9 @@ import React, { useState } from "react";
 import { View, KeyboardAvoidingView, Platform } from "react-native";
 import { TextInput, Button, Text, Card, Snackbar } from "react-native-paper";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
-import { FirebaseError } from "firebase/app"; // Import for Firebase error handling
+import { FirebaseError } from "firebase/app"; 
 import { useRouter } from "expo-router";
-import { auth } from "./firebaseConfig"; // Import Firebase config
+import { auth } from "./firebaseConfig"; 
 
 export default function LoginScreen() {
   const router = useRouter();

@@ -11,9 +11,10 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { DocumentData, doc, getDoc, deleteDoc } from "firebase/firestore";
-import { Card, Button } from "react-native-paper";
+import { Card, Button, Divider, IconButton } from "react-native-paper";
 import { db } from "./firebaseConfig";
 import { getAuth, onAuthStateChanged, deleteUser, signOut } from "firebase/auth";
+import { MaterialIcons } from "@expo/vector-icons";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -64,20 +65,11 @@ export default function ProfileScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              // Delete user data from Firestore
               await deleteDoc(doc(db, "users", userId));
-
-              // Delete authentication account
-              const auth = getAuth();
               const user = auth.currentUser;
-
               if (user) {
                 await deleteUser(user);
-              } else {
-                console.error("No authenticated user found.");
               }
-
-              // Sign out and redirect to login screen
               await signOut(auth);
               router.push("../login");
             } catch (error) {
@@ -90,86 +82,119 @@ export default function ProfileScreen() {
     );
   };
 
+  const renderInfoItem = (iconName: string, label: string, value?: string) => (
+    <>
+      <View style={styles.infoRow}>
+        <MaterialIcons name={iconName as any} size={24} color="#6C63FF" style={styles.infoIcon} />
+        <View style={styles.infoTextContainer}>
+          <Text style={styles.infoLabel}>{label}</Text>
+          <Text style={styles.infoValue}>{value || "N/A"}</Text>
+        </View>
+      </View>
+      <Divider style={styles.divider} />
+    </>
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4A90E2" />
+        <ActivityIndicator size="large" color="#6C63FF" />
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+    <KeyboardAvoidingView 
+      behavior={Platform.OS === "ios" ? "padding" : "height"} 
+      style={{ flex: 1 }}
+    >
       <ScrollView contentContainerStyle={styles.container}>
-        {/* Personal Information */}
-        <Card style={styles.formCard}>
-          <Text style={styles.categoryTitle}>Personal Information</Text>
-          <View style={styles.formContainer}>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>Username:</Text>
-              <Text style={styles.value}>{userData?.username || "N/A"}</Text>
-            </View>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>Police ID:</Text>
-              <Text style={styles.value}>{userData?.policeID || "N/A"}</Text>
-            </View>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>Department:</Text>
-              <Text style={styles.value}>{userData?.department || "N/A"}</Text>
-            </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <IconButton
+            icon="arrow-left"
+            size={24}
+            iconColor="#FFFFFF"
+            onPress={() => router.back()}
+            style={styles.backButton}
+          />
+          <View style={styles.headerTitleContainer}>
+            <Text style={styles.headerTitle}>My Profile</Text>
+          </View>
+          <View style={{ width: 48 }} />
+        </View>
+        
+        {/* Profile Card */}
+        <Card style={styles.profileCard}>
+          <View style={styles.profileHeader}>
+            <MaterialIcons name="account-circle" size={80} color="#6C63FF" />
+            <Text style={styles.profileName}>{userData?.username || "User"}</Text>
+            <Text style={styles.profileRole}>{userData?.department || "Police Department"}</Text>
           </View>
         </Card>
 
-        {/* Contact Information */}
-        <Card style={styles.formCard}>
-          <Text style={styles.categoryTitle}>Contact Information</Text>
-          <View style={styles.formContainer}>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>Phone Number:</Text>
-              <Text style={styles.value}>{userData?.phone || "N/A"}</Text>
-            </View>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>Email Address:</Text>
-              <Text style={styles.value}>{userData?.email || "N/A"}</Text>
-            </View>
-          </View>
-        </Card>
+        {/* Information Sections */}
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Personal Information</Text>
+          <Card style={styles.infoCard}>
+            {renderInfoItem("badge", "Police ID", userData?.policeID)}
+            {renderInfoItem("work", "Department", userData?.department)}
+          </Card>
+        </View>
 
-        {/* Address Information */}
-        <Card style={styles.formCard}>
-          <Text style={styles.categoryTitle}>Address Information</Text>
-          <View style={styles.formContainer}>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>Address:</Text>
-              <Text style={styles.value}>{userData?.address || "N/A"}</Text>
-            </View>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>City:</Text>
-              <Text style={styles.value}>{userData?.city || "N/A"}</Text>
-            </View>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>State:</Text>
-              <Text style={styles.value}>{userData?.state || "N/A"}</Text>
-            </View>
-            <View style={styles.inputGroupRow}>
-              <Text style={styles.label}>Postal Code:</Text>
-              <Text style={styles.value}>{userData?.postalCode || "N/A"}</Text>
-            </View>
-          </View>
-        </Card>
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Contact Information</Text>
+          <Card style={styles.infoCard}>
+            {renderInfoItem("phone", "Phone", userData?.phone)}
+            {renderInfoItem("email", "Email", userData?.email)}
+          </Card>
+        </View>
 
-        {/* Buttons */}
-        <Button mode="contained" onPress={() => router.push("../edit_profile")} style={styles.button}>
-          Edit Profile
-        </Button>
+        <View style={styles.sectionContainer}>
+          <Text style={styles.sectionTitle}>Address Information</Text>
+          <Card style={styles.infoCard}>
+            {renderInfoItem("location-on", "Address", userData?.address)}
+            {renderInfoItem("location-city", "City", userData?.city)}
+            {renderInfoItem("map", "State", userData?.state)}
+            {renderInfoItem("markunread-mailbox", "Postal Code", userData?.postalCode)}
+          </Card>
+        </View>
 
-        <Button mode="contained" onPress={() => router.push("../login")} style={styles.button}>
-          Logout
-        </Button>
+        {/* Action Buttons */}
+        <View style={styles.buttonGroup}>
+          <Button 
+            mode="contained" 
+            onPress={() => router.push("../edit_profile")} 
+            style={styles.button}
+            labelStyle={styles.buttonLabel}
+            icon="pencil"
+          >
+            <Text style={styles.buttonText}>Edit Profile</Text>
+          </Button>
 
-        <Button mode="contained" onPress={handleDeleteProfile} style={[styles.button, styles.deleteButton]}>
-          Delete Profile
-        </Button>
+          <Button 
+            mode="outlined" 
+            onPress={() => {
+              signOut(auth);
+              router.push("../login");
+            }} 
+            style={[styles.button, styles.logoutButton]}
+            labelStyle={[styles.buttonLabel, styles.logoutButtonLabel]}
+            icon="logout"
+          >
+            <Text style={[styles.buttonText, styles.logoutButtonText]}>Logout</Text>
+          </Button>
+
+          <Button 
+            mode="contained" 
+            onPress={handleDeleteProfile} 
+            style={[styles.button, styles.deleteButton]}
+            labelStyle={styles.buttonLabel}
+            icon="delete"
+          >
+            <Text style={styles.buttonText}>Delete Account</Text>
+          </Button>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -178,55 +203,123 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: "#101218",
-    padding: 20,
+    backgroundColor: "#121212",
+    padding: 16,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 24,
+  },
+  backButton: {
+    marginRight: 8,
+  },
+  headerTitleContainer: {
+    flex: 1,
     alignItems: "center",
   },
-  formCard: {
-    backgroundColor: "#1C1E2A",
-    borderRadius: 12,
-    width: "100%",
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  profileCard: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 16,
+    marginBottom: 24,
     padding: 20,
-    marginBottom: 20,
+    elevation: 4,
   },
-  formContainer: { 
-    width: "100%",
+  profileHeader: {
+    alignItems: "center",
+    marginBottom: 16,
   },
-  inputGroupRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
-  },
-  label: {
-    fontSize: 18,
-    color: "#bbbbbb",
+  profileName: {
+    fontSize: 22,
     fontWeight: "bold",
-    flex: 160,
+    color: "#FFFFFF",
+    marginTop: 12,
   },
-  value: {
+  profileRole: {
+    fontSize: 16,
+    color: "#BBBBBB",
+    marginTop: 4,
+  },
+  sectionContainer: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
     fontSize: 18,
-    color: "#ffffff",
-    flex: 190,
-  },
-  categoryTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#ffffff",
+    fontWeight: "600",
+    color: "#FFFFFF",
     marginBottom: 12,
+    paddingLeft: 8,
+  },
+  infoCard: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  infoIcon: {
+    marginRight: 16,
+  },
+  infoTextContainer: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 14,
+    color: "#BBBBBB",
+    marginBottom: 2,
+  },
+  infoValue: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    fontWeight: "500",
+  },
+  divider: {
+    backgroundColor: "#333333",
+    marginHorizontal: -16,
+  },
+  buttonGroup: {
+    marginTop: 16,
+    marginBottom: 32,
   },
   button: {
-    marginTop: 20,
-    backgroundColor: "#4A90E2",
-    padding: 12,
-    width: "100%",
+    borderRadius: 10,
+    paddingVertical: 10,
+    marginBottom: 12,
+    elevation: 2,
+  },
+  buttonLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  buttonText: {
+    color: "#FFFFFF",
+  },
+  logoutButton: {
+    backgroundColor: "transparent",
+    borderColor: "#6C63FF",
+    borderWidth: 2,
+  },
+  logoutButtonText: {
+    color: "#6C63FF",
+  },
+  logoutButtonLabel: {
+    color: "#6C63FF",
   },
   deleteButton: {
-    backgroundColor: "#D32F2F",
+    backgroundColor: "#FF3B30",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#101218",
+    backgroundColor: "#121212",
   },
 });

@@ -44,12 +44,6 @@ export default function Dashboard() {
           <Avatar.Icon size={50} icon="account" style={styles.avatar} />
         </TouchableOpacity>
         <Text style={styles.username}>profile</Text>
-        <IconButton
-          icon="magnify"
-          size={30}
-          iconColor="#fff"
-          onPress={() => console.log("Search clicked")}
-        />
       </View>
 
       <Text style={styles.title}>Dashboard</Text>
