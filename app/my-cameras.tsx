@@ -21,7 +21,7 @@ import {
 } from "react-native-paper";
 import { useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { collection, getDocs, doc, updateDoc, deleteDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, deleteDoc, query, where, getDoc } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 import { getAuth } from "firebase/auth";
 import { Picker } from "@react-native-picker/picker";
@@ -89,8 +89,13 @@ export default function MyCameras() {
         return;
       }
 
-      let baseQuery = collection(db, "cctv_cameras");
-      let filteredQuery = query(baseQuery, where("username", "==", user.email));
+    
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        const username = userDoc.data()?.username;
+
+        // Create the filtered query using the username
+        let baseQuery = collection(db, "cctv_cameras");
+        let filteredQuery = query(baseQuery, where("username", "==", username));
 
       if (filters.city) {
         filteredQuery = query(filteredQuery, where("city", "==", filters.city));

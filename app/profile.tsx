@@ -111,13 +111,7 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <IconButton
-            icon="arrow-left"
-            size={24}
-            iconColor="#FFFFFF"
-            onPress={() => router.back()}
-            style={styles.backButton}
-          />
+         
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>My Profile</Text>
           </View>

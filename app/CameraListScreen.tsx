@@ -31,7 +31,7 @@ interface Camera {
   organization: string;
   ownerName: string;
   phoneNumber: string;
-  policeId: string;
+  policeID: string;
   username: string;
   workingCondition: string;
 }
@@ -316,7 +316,7 @@ export default function CameraListScreen() {
                 
                 <View style={styles.detailRow}>
                   <MaterialIcons name="security" size={20} color="#007AFF" />
-                  <Text style={styles.detailText}>Police ID: {selectedCamera.policeId}</Text>
+                  <Text style={styles.detailText}>Police ID: {selectedCamera.policeID}</Text>
                 </View>
               </ScrollView>
               

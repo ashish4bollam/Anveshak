@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, KeyboardAvoidingView, Platform } from "react-native";
+import { View, KeyboardAvoidingView, Platform, ImageBackground } from "react-native";
 import { TextInput, Button, Text, Card, Snackbar } from "react-native-paper";
 import { signInWithEmailAndPassword, sendPasswordResetEmail, signOut } from "firebase/auth";
 import { FirebaseError } from "firebase/app"; 
@@ -14,7 +14,7 @@ export default function LoginScreen() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
   const [snackbarVisible, setSnackbarVisible] = useState(false);
-  const [showPassword, setShowPassword] = useState(false); // New state for password visibility
+  const [showPassword, setShowPassword] = useState(false);
 
   const showSnackbar = (message: string) => {
     setSnackbarMessage(message);
@@ -23,7 +23,7 @@ export default function LoginScreen() {
 
   // Function to map Firebase error codes to user-friendly messages
   const getFriendlyErrorMessage = (errorCode: string) => {
-    console.log("Firebase Error Code:", errorCode); // Debugging: Logs exact error code
+    console.log("Firebase Error Code:", errorCode);
 
     const errorMessages: { [key: string]: string } = {
       "auth/invalid-email": "Invalid email format. Please enter a valid email.",
@@ -58,7 +58,7 @@ export default function LoginScreen() {
       }
 
       showSnackbar("Logged in successfully!");
-      router.replace("/dashboard"); // Redirect to dashboard after login
+      router.replace("/dashboard");
     } catch (error) {
       const firebaseError = error as FirebaseError;
       showSnackbar(getFriendlyErrorMessage(firebaseError.code));
@@ -83,71 +83,95 @@ export default function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1, justifyContent: "center", padding: 20, backgroundColor: "#F4F6F8" }}
+    <ImageBackground
+      source={require('../assets/anveshak-background.png')}
+      style={{ flex: 1, width: '100%', height: '100%' }}
+      resizeMode="cover"
     >
-      <Card style={{ padding: 20, borderRadius: 15, elevation: 5, backgroundColor: "#fff" }}>
-        <Text variant="headlineMedium" style={{ marginBottom: 20, textAlign: "center", fontWeight: "bold" }}>
-          Login
-        </Text>
-
-        <TextInput
-          label="Email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          mode="outlined"
-          style={{ marginBottom: 10 }}
-        />
-        <TextInput
-          label="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry={!showPassword} // Toggle based on showPassword state
-          mode="outlined"
-          style={{ marginBottom: 10 }}
-          right={
-            <TextInput.Icon 
-              icon={showPassword ? "eye-off" : "eye"} 
-              onPress={() => setShowPassword(!showPassword)} 
-              forceTextInputFocus={false} // Prevents keyboard from closing when pressing the icon
-            />
-          }
-        />
-
-        <Button mode="contained" onPress={handleLogin} loading={loading} disabled={loading} style={{ borderRadius: 8, marginVertical: 10 }}>
-          Login
-        </Button>
-
-        <Button
-          mode="text"
-          onPress={handleForgotPassword}
-          disabled={forgotPasswordLoading}
-          style={{ borderRadius: 8, marginBottom: 10 }}
-        >
-          Forgot Password?
-        </Button>
-
-        <Text style={{ textAlign: "center", fontSize: 14 }}>Don't have an account?</Text>
-        <Button mode="text" onPress={() => router.push("/signup")} style={{ borderRadius: 8 }}>
-          Sign Up
-        </Button>
-      </Card>
-
-      {/* Snackbar for UI alerts */}
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={5000} // Show for 5 seconds
-        action={{
-          label: "OK",
-          onPress: () => setSnackbarVisible(false),
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ 
+          flex: 1, 
+          justifyContent: "center", 
+          padding: 20,
+          backgroundColor: 'rgba(0,0,0,0.3)' // Adds a slight dark overlay for better readability
         }}
       >
-        {snackbarMessage}
-      </Snackbar>
-    </KeyboardAvoidingView>
+        <Card style={{ 
+          padding: 20, 
+          borderRadius: 15, 
+          elevation: 5, 
+          backgroundColor: "rgba(255,255,255,0.9)", // Semi-transparent card
+          marginHorizontal: 10
+        }}>
+          <Text variant="headlineMedium" style={{ marginBottom: 20, textAlign: "center", fontWeight: "bold" }}>
+            Login
+          </Text>
+
+          <TextInput
+            label="Email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            mode="outlined"
+            style={{ marginBottom: 10 }}
+          />
+          <TextInput
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry={!showPassword}
+            mode="outlined"
+            style={{ marginBottom: 10 }}
+            right={
+              <TextInput.Icon 
+                icon={showPassword ? "eye-off" : "eye"} 
+                onPress={() => setShowPassword(!showPassword)} 
+                forceTextInputFocus={false}
+              />
+            }
+          />
+
+          <Button 
+            mode="contained" 
+            onPress={handleLogin} 
+            loading={loading} 
+            disabled={loading} 
+            style={{ borderRadius: 8, marginVertical: 10 }}
+          >
+            Login
+          </Button>
+
+          <Button
+            mode="text"
+            onPress={handleForgotPassword}
+            disabled={forgotPasswordLoading}
+            style={{ borderRadius: 8, marginBottom: 10 }}
+          >
+            Forgot Password?
+          </Button>
+
+          <Text style={{ textAlign: "center", fontSize: 14 }}>Don't have an account?</Text>
+          <Button mode="text" onPress={() => router.push("/signup")} style={{ borderRadius: 8 }}>
+            Sign Up
+          </Button>
+        </Card>
+
+        {/* Snackbar for UI alerts */}
+        <Snackbar
+          visible={snackbarVisible}
+          onDismiss={() => setSnackbarVisible(false)}
+          duration={5000}
+          action={{
+            label: "OK",
+            onPress: () => setSnackbarVisible(false),
+          }}
+          style={{ bottom: 20 }} // Position the snackbar a bit higher from bottom
+        >
+          {snackbarMessage}
+        </Snackbar>
+      </KeyboardAvoidingView>
+    </ImageBackground>
   );
 }

@@ -32,73 +32,80 @@ interface FormData {
   organization: string;
   workingCondition: string;
   username?: string;
-  policeId?: string;
+  policeID?: string;
   dateChecked?: string;
 }
 
-const validateExcelData = async (data: any[], userData: { username: string; policeId: string } | null): Promise<{ valid: boolean; report: string[] }> => {
-  const requiredColumns = [
-    "ownerName",
-    "phoneNumber",
-    "deviceName",
-    "deviceType",
-    "latitude",
-    "longitude",
-    "address",
-    "city",
-    "organization",
-    "workingCondition",
-    "policeId",
-    "username",
-    "dateChecked",
-  ];
-  let errors: string[] = [];
 
-  for (let index = 0; index < data.length; index++) {
-    const row = data[index];
-
-    for (let col of requiredColumns) {
-      if (!row[col] || row[col].toString().trim() === "") {
-        errors.push(`Row ${index + 1} is missing value for "${col}".`);
-      }
-    }
-
-    if (row["phoneNumber"] && !/^\d{10}$/.test(row["phoneNumber"].toString().trim())) {
-      errors.push(`Row ${index + 1} has an invalid phone number: "${row["phoneNumber"]}".`);
-    }
-
-    if (row["dateChecked"]) {
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(row["dateChecked"].toString().trim())) {
-        errors.push(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
-      } else {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const inputDate = new Date(row["dateChecked"]);
-        if (inputDate > today) {
-          errors.push(`Row ${index + 1} has a future date: "${row["dateChecked"]}".`);
-        }
-      }
-    }
-
-    const camerasRef = collection(db, "cctv_cameras");
-    const q = query(
-      camerasRef,
-      where("deviceName", "==", row.deviceName),
-      where("latitude", "==", row.latitude),
-      where("longitude", "==", row.longitude)
-    );
-
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) {
-      errors.push(`Row ${index + 1} is a duplicate entry: Device "${row.deviceName}" at (${row.latitude}, ${row.longitude}) already exists.`);
-    }
-  }
-
-  return { valid: errors.length === 0, report: errors };
-};
 
 export default function AddCamera() {
+
+  const validateExcelData = async (data: any[], userData: { username: string; policeID: string } | null): Promise<{ valid: boolean; report: string[] }> => {
+    const requiredColumns = [
+      "ownerName",
+      "phoneNumber",
+      "deviceName",
+      "deviceType",
+      "latitude",
+      "longitude",
+      "address",
+      "city",
+      "organization",
+      "workingCondition",
+      "policeID",
+      "username",
+      "dateChecked",
+    ];
+    let errors: string[] = [];
+
+    setLoading(true);
+  
+  
+  
+    for (let index = 0; index < data.length; index++) {
+      const row = data[index];
+  
+      for (let col of requiredColumns) {
+        if (!row[col] || row[col].toString().trim() === "") {
+          errors.push(`Row ${index + 1} is missing value for "${col}".`);
+        }
+      }
+  
+      if (row["phoneNumber"] && !/^\d{10}$/.test(row["phoneNumber"].toString().trim())) {
+        errors.push(`Row ${index + 1} has an invalid phone number: "${row["phoneNumber"]}".`);
+      }
+  
+      if (row["dateChecked"]) {
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(row["dateChecked"].toString().trim())) {
+          errors.push(`Row ${index + 1} has an invalid date format: "${row["dateChecked"]}".`);
+        } else {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const inputDate = new Date(row["dateChecked"]);
+          if (inputDate > today) {
+            errors.push(`Row ${index + 1} has a future date: "${row["dateChecked"]}".`);
+          }
+        }
+      }
+  
+      const camerasRef = collection(db, "cctv_cameras");
+      const q = query(
+        camerasRef,
+        where("deviceName", "==", row.deviceName),
+        where("latitude", "==", row.latitude),
+        where("longitude", "==", row.longitude)
+      );
+  
+      const querySnapshot = await getDocs(q);
+      if (!querySnapshot.empty) {
+        errors.push(`Row ${index + 1} is a duplicate entry: Device "${row.deviceName}" at (${row.latitude}, ${row.longitude}) already exists.`);
+      }
+    }
+    setLoading(false);
+  
+    return { valid: errors.length === 0, report: errors };
+  };
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>({
     ownerName: "",
@@ -114,7 +121,7 @@ export default function AddCamera() {
     dateChecked: "",
   });
   const [loading, setLoading] = useState<boolean>(false);
-  const [userData, setUserData] = useState<{ username: string; policeId: string } | null>(null);
+  const [userData, setUserData] = useState<{ username: string; policeID: string } | null>(null);
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showCustomDeviceTypeInput, setShowCustomDeviceTypeInput] = useState(false);
@@ -128,8 +135,9 @@ export default function AddCamera() {
         const userSnapshot = await getDocs(userRef);
         const userInfo = userSnapshot.docs.find((doc) => doc.id === user.uid)?.data();
         if (userInfo) {
-          setUserData({ username: userInfo.username, policeId: userInfo.policeId });
+          setUserData({ username: userInfo.username, policeID: userInfo.policeID });
         }
+       ;
       }
     });
   }, []);
@@ -291,8 +299,9 @@ export default function AddCamera() {
                 const finalData = {
                   ...formData,
                   username: userData?.username,
-                  policeId: userData?.policeId,
+                  policeID: userData?.policeID,
                 };
+               
                 await addDoc(camerasRef, finalData);
                 Alert.alert("Success", "Camera details submitted successfully!");
                 router.push("/dashboard");
@@ -304,8 +313,9 @@ export default function AddCamera() {
         const finalData = {
           ...formData,
           username: userData?.username,
-          policeId: userData?.policeId,
+          policeID: userData?.policeID,
         };
+        console.log(userData);
         await addDoc(camerasRef, finalData);
         Alert.alert("Success", "Camera details submitted successfully!");
         router.push("/dashboard");
@@ -395,7 +405,7 @@ export default function AddCamera() {
             organization: (record.organization || "").trim(),
             workingCondition: (record.workingCondition || "").trim(),
             username: (record?.username || "").trim(),
-            policeId: (record.policeId || userData?.policeId || "UNKNOWN_ID").trim(),
+            policeID: (record.policeID || userData?.policeID || "UNKNOWN_ID").trim(),
             dateChecked: (record.dateChecked || new Date().toISOString().split("T")[0]).trim(),
           };
           await addDoc(collection(db, "cctv_cameras"), finalData);
@@ -413,8 +423,8 @@ export default function AddCamera() {
   };
 
   const handleDownloadTemplate = async () => {
-    const csvTemplate = `ownerName,phoneNumber,deviceName,deviceType,latitude,longitude,address,city,organization,workingCondition,policeId,dateChecked
-John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnagar,IIT Ropar,Working,PR12345,2023-10-01
+    const csvTemplate = `ownerName,phoneNumber,deviceName,deviceType,latitude,longitude,address,city,organization,workingCondition,policeID,dateChecked,username
+John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnagar,IIT Ropar,Working,PR12345,2023-10-01,Ashish
 `;
     const fileUri = FileSystem.documentDirectory + "cctv_template.csv";
     try {
@@ -648,7 +658,7 @@ John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnag
         <Text style={styles.requirementsText}>
           • ownerName, phoneNumber, deviceName, deviceType{'\n'}
           • latitude, longitude, address, city{'\n'}
-          • organization, workingCondition, policeId{'\n'}
+          • organization, workingCondition, policeID,username{'\n'}
           • dateChecked (YYYY-MM-DD, no future dates)
         </Text>
       </View>
