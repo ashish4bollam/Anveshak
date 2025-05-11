@@ -19,7 +19,7 @@ import Papa from "papaparse";
 import * as FileSystem from "expo-file-system";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
-
+import * as Sharing from 'expo-sharing';
 interface FormData {
   ownerName: string;
   phoneNumber: string;
@@ -423,16 +423,90 @@ export default function AddCamera() {
   };
 
   const handleDownloadTemplate = async () => {
-    const csvTemplate = `ownerName,phoneNumber,deviceName,deviceType,latitude,longitude,address,city,organization,workingCondition,policeID,dateChecked,username
-John Doe,9876543210,Main Entrance,CCTV,30.9810,76.5350,"IIT Ropar Campus",Rupnagar,IIT Ropar,Working,PR12345,2023-10-01,Ashish
-`;
-    const fileUri = FileSystem.documentDirectory + "cctv_template.csv";
+    setLoading(true);
+    
     try {
-      await FileSystem.writeAsStringAsync(fileUri, csvTemplate, { encoding: FileSystem.EncodingType.UTF8 });
-      Alert.alert("Template Downloaded", "Template saved as 'cctv_template.csv' in your documents.");
+      // Create worksheet data
+      const worksheetData = [
+        ["ownerName", "phoneNumber", "deviceName", "deviceType", "latitude", "longitude", 
+         "address", "city", "organization", "workingCondition", "policeID", "dateChecked", "username"],
+        ["John Doe", "9876543210", "Main Entrance", "CCTV", "30.9810", "76.5350", 
+         "IIT Ropar Campus", "Rupnagar", "IIT Ropar", "Working", "PR12345", "2023-10-01", "Ashish"]
+      ];
+  
+      // Create workbook and worksheet
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+      XLSX.utils.book_append_sheet(workbook, worksheet, "CCTV Template");
+  
+      // Generate Excel file
+      const excelFileData = XLSX.write(workbook, { type: 'base64', bookType: 'xlsx' });
+      
+      // Create filename with current date
+      const fileName = `cctv_template_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileUri = FileSystem.cacheDirectory + fileName;
+      
+      // Write the Excel file
+      await FileSystem.writeAsStringAsync(fileUri, excelFileData, {
+        encoding: FileSystem.EncodingType.Base64
+      });
+  
+      // Show action sheet with options
+      Alert.alert(
+        "Save Template",
+        "Choose how you want to save the template:",
+        [
+          {
+            text: "Share via System",
+            onPress: async () => {
+              try {
+                await Sharing.shareAsync(fileUri, {
+                  mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                  dialogTitle: 'Save CCTV Template',
+                  UTI: 'org.openxmlformats.spreadsheet'
+                });
+              } catch (shareError) {
+                Alert.alert("Error", "Sharing failed. Please try saving locally.");
+              }
+            }
+          },
+          {
+            text: "Save Locally",
+            onPress: async () => {
+              try {
+                const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+                if (permission.granted) {
+                  const localFileUri = await FileSystem.StorageAccessFramework.createFileAsync(
+                    permission.directoryUri,
+                    fileName,
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                  );
+                  
+                  await FileSystem.writeAsStringAsync(localFileUri, excelFileData, {
+                    encoding: FileSystem.EncodingType.Base64
+                  });
+                  
+                  Alert.alert("Success", "Excel template saved to local storage");
+                } else {
+                  Alert.alert("Info", "Permission denied. Template was not saved.");
+                }
+              } catch (saveError) {
+                Alert.alert("Error", "Failed to save Excel template locally.");
+              }
+            }
+          },
+          {
+            text: "Cancel",
+            style: "cancel"
+          }
+        ]
+      );
+      
     } catch (error) {
-      console.error("Error downloading template:", error);
-      Alert.alert("Error", "Failed to download template.");
+      console.error("Template Error:", error);
+      Alert.alert("Error", "Failed to create Excel template file.");
+    } finally {
+      setLoading(false);
     }
   };
 
